@@ -132,7 +132,8 @@
     .main {
       flex: 1;
       padding: 28px 32px;
-      max-width: 1100px;
+      max-width: 1500px;
+      margin: 0 auto;     /* center the content in the space beside the sidebar on wide screens */
     }
     .page-title { font-size: 24px; font-weight: 700; margin: 0 0 4px; }
     .page-sub { color: var(--muted); font-size: 14px; margin: 0 0 24px; }
@@ -290,8 +291,8 @@
     .legend-pct { color: var(--muted); }
 
     /* ---------- Vertical bar chart (monthly spending / compare) ---------- */
-    .barchart { display: flex; gap: 12px; height: 180px; }
-    .bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; }
+    .barchart { display: flex; gap: 12px; height: 180px; overflow-x: auto; padding-bottom: 6px; }
+    .bar-col { flex: 1; min-width: 40px; display: flex; flex-direction: column; align-items: center; }
     .bar-area { flex: 1; width: 100%; display: flex; align-items: flex-end; justify-content: center; }
     .vbar {
       width: 58%; background: var(--green);
@@ -657,7 +658,7 @@
         <div class="card">
           <h3 class="section-title">Add a wallet</h3>
           <form id="wallet-form" class="cat-form">
-            <input id="wallet-icon" class="cat-icon-input" type="text" maxlength="2" value="👛" title="Pick an emoji" />
+            <input id="wallet-icon" class="cat-icon-input" type="text" value="👛" title="Pick an emoji" />
             <input id="wallet-name" type="text" placeholder="Wallet name (e.g. GCash)" required />
             <input id="wallet-start" type="number" step="100" placeholder="Starting ₱" />
             <input id="wallet-color" type="color" value="#1f8a4c" title="Pick a color" />
@@ -677,7 +678,7 @@
           <div id="c-manage"></div>
 
           <form id="cat-form" class="cat-form">
-            <input id="cat-icon" class="cat-icon-input" type="text" maxlength="2" value="🏷️" title="Pick an emoji" />
+            <input id="cat-icon" class="cat-icon-input" type="text" value="🏷️" title="Pick an emoji" />
             <input id="cat-name" type="text" placeholder="New expense category" required />
             <input id="cat-color" type="color" value="#1f8a4c" title="Pick a color" />
             <button type="submit" class="btn btn-primary cat-add-btn">Add</button>
@@ -690,7 +691,7 @@
           <div id="c-income-manage"></div>
 
           <form id="income-cat-form" class="cat-form">
-            <input id="income-cat-icon" class="cat-icon-input" type="text" maxlength="2" value="💰" title="Pick an emoji" />
+            <input id="income-cat-icon" class="cat-icon-input" type="text" value="💰" title="Pick an emoji" />
             <input id="income-cat-name" type="text" placeholder="New income category" required />
             <input id="income-cat-color" type="color" value="#1f8a4c" title="Pick a color" />
             <button type="submit" class="btn btn-primary cat-add-btn">Add</button>
@@ -827,7 +828,7 @@
       <h2 id="cat-modal-title">Edit category</h2>
       <form id="cat-edit-form">
         <label for="cat-edit-icon">Icon</label>
-        <input id="cat-edit-icon" type="text" maxlength="2" placeholder="🏷️" />
+        <input id="cat-edit-icon" type="text" placeholder="🏷️" />
 
         <label for="cat-edit-name">Name</label>
         <input id="cat-edit-name" type="text" placeholder="Category name" />
@@ -1046,9 +1047,12 @@
       const catRows = [];
       DEFAULT_CATEGORIES.forEach(c => catRows.push({ user_id: currentUserId, kind: "expense", name: c.name, icon: c.icon, color: c.color }));
       DEFAULT_INCOME_CATEGORIES.forEach(c => catRows.push({ user_id: currentUserId, kind: "income", name: c.name, icon: c.icon, color: c.color }));
-      await sb.from("categories").insert(catRows);
-      await sb.from("wallets").insert(DEFAULT_WALLETS.map(w =>
-        ({ user_id: currentUserId, name: w.name, icon: w.icon, color: w.color, balance: w.balance })));
+      // upsert + ignoreDuplicates: if another tab/device already seeded,
+      // this quietly does nothing instead of creating duplicates.
+      await sb.from("categories").upsert(catRows, { onConflict: "user_id,kind,name", ignoreDuplicates: true });
+      await sb.from("wallets").upsert(DEFAULT_WALLETS.map(w =>
+        ({ user_id: currentUserId, name: w.name, icon: w.icon, color: w.color, balance: w.balance })),
+        { onConflict: "user_id,name", ignoreDuplicates: true });
     }
     async function loadAll() {
       if (loadingData) return;          // don't run two loads at once
@@ -1760,7 +1764,9 @@
         alert("Keep at least one wallet.");
         return;
       }
-      const fallback = wallets.find(w => w.name !== name).name;
+      const other = wallets.find(w => w.name !== name);
+      if (!other) { alert("Keep at least one wallet."); return; }
+      const fallback = other.name;
       const inUse = transactions.filter(t =>
         t.wallet === name || t.fromWallet === name || t.toWallet === name).length;
 
@@ -2061,13 +2067,12 @@
         if (authMode === "signup") {
           const { data, error } = await sb.auth.signUp({ email, password });
           if (error) throw error;
-          if (!data.session) {
-            // Email confirmation is on — they must verify first.
-            authError.style.color = "var(--green-dark)";
-            authError.textContent = "Account made! Check your email to confirm, then log in.";
-            setAuthMode("login");
-          }
-          // If a session came back, onAuthStateChange below shows the app.
+          // Never drop the user straight into the app. If email confirmation
+          // is off a session is returned — end it so they log in cleanly.
+          if (data.session) await sb.auth.signOut();
+          setAuthMode("login");          // switch first (it clears the message box)...
+          authError.style.color = "var(--green-dark)";
+          authError.textContent = "Account created! Check your email to confirm, then log in.";
         } else {
           const { error } = await sb.auth.signInWithPassword({ email, password });
           if (error) throw error;
