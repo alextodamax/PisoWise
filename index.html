@@ -1970,14 +1970,18 @@
     // ============================================================
     // PAGE SWITCHING (sidebar tabs)
     // ============================================================
-    document.querySelectorAll(".nav-item").forEach(btn => {
-      btn.addEventListener("click", () => {
-        document.querySelectorAll(".nav-item").forEach(b => b.classList.remove("active"));
-        btn.classList.add("active");
-        const page = btn.dataset.page;
-        document.querySelectorAll(".page").forEach(p => p.classList.add("hidden"));
-        document.getElementById("page-" + page).classList.remove("hidden");
-      });
+    function selectPage(page) {
+      document.querySelectorAll(".nav-item").forEach(b =>
+        b.classList.toggle("active", b.dataset.page === page));
+      document.querySelectorAll(".page").forEach(p => p.classList.add("hidden"));
+      const el = document.getElementById("page-" + page);
+      if (el) el.classList.remove("hidden");
+    }
+    // Only the real tabs switch pages. The Log out button is also a .nav-item
+    // but has no data-page — binding it here would hide every page (the
+    // "blank screen after re-login" bug).
+    document.querySelectorAll(".nav-item[data-page]").forEach(btn => {
+      btn.addEventListener("click", () => selectPage(btn.dataset.page));
     });
 
     // ============================================================
@@ -2315,6 +2319,9 @@
       if (session) {
         currentUserId = session.user.id;
         showApp(session.user.email);
+        // On a fresh login, land on the Dashboard. (Not on TOKEN_REFRESHED,
+        // so we never yank the user off their current tab mid-use.)
+        if (event === "SIGNED_IN") selectPage("dashboard");
         loadAll();                       // pull this user's data from the cloud
       } else {
         currentUserId = null;
