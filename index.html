@@ -473,6 +473,28 @@
     }
 
     /* =========================================================
+       EMOJI PICKER (click an icon field to choose an emoji)
+       ========================================================= */
+    .emoji-input { cursor: pointer; caret-color: transparent; }
+    #emoji-popover {
+      display: none; position: fixed; z-index: 70;
+      border-radius: 12px; overflow: hidden;
+      box-shadow: 0 16px 48px rgba(20, 60, 40, 0.28);
+    }
+    #emoji-popover emoji-picker {
+      width: 320px;
+      height: 340px;
+      max-width: 92vw;
+      --background: #fff;
+      --border-color: var(--border);
+    }
+
+    /* Stacked action buttons (used by the delete-wallet choice modal) */
+    .modal-actions.stack { flex-direction: column; gap: 10px; }
+    .btn-danger { background: var(--danger); color: #fff; }
+    .btn-danger:hover { filter: brightness(1.05); }
+
+    /* =========================================================
        MOBILE: turn the sidebar into a bottom tab bar (phone-friendly)
        ========================================================= */
     @media (max-width: 720px) {
@@ -508,6 +530,8 @@
 
   <!-- Supabase client library (loaded from a CDN) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Emoji picker web component (registers the <emoji-picker> element) -->
+  <script type="module" src="https://cdn.jsdelivr.net/npm/emoji-picker-element@1/index.js"></script>
 </head>
 <body>
 
@@ -658,7 +682,7 @@
         <div class="card">
           <h3 class="section-title">Add a wallet</h3>
           <form id="wallet-form" class="cat-form">
-            <input id="wallet-icon" class="cat-icon-input" type="text" value="👛" title="Pick an emoji" />
+            <input id="wallet-icon" class="cat-icon-input emoji-input" type="text" value="👛" readonly title="Pick an emoji" />
             <input id="wallet-name" type="text" placeholder="Wallet name (e.g. GCash)" required />
             <input id="wallet-start" type="number" step="100" placeholder="Starting ₱" />
             <input id="wallet-color" type="color" value="#1f8a4c" title="Pick a color" />
@@ -678,7 +702,7 @@
           <div id="c-manage"></div>
 
           <form id="cat-form" class="cat-form">
-            <input id="cat-icon" class="cat-icon-input" type="text" value="🏷️" title="Pick an emoji" />
+            <input id="cat-icon" class="cat-icon-input emoji-input" type="text" value="🏷️" readonly title="Pick an emoji" />
             <input id="cat-name" type="text" placeholder="New expense category" required />
             <input id="cat-color" type="color" value="#1f8a4c" title="Pick a color" />
             <button type="submit" class="btn btn-primary cat-add-btn">Add</button>
@@ -691,7 +715,7 @@
           <div id="c-income-manage"></div>
 
           <form id="income-cat-form" class="cat-form">
-            <input id="income-cat-icon" class="cat-icon-input" type="text" value="💰" title="Pick an emoji" />
+            <input id="income-cat-icon" class="cat-icon-input emoji-input" type="text" value="💰" readonly title="Pick an emoji" />
             <input id="income-cat-name" type="text" placeholder="New income category" required />
             <input id="income-cat-color" type="color" value="#1f8a4c" title="Pick a color" />
             <button type="submit" class="btn btn-primary cat-add-btn">Add</button>
@@ -828,7 +852,7 @@
       <h2 id="cat-modal-title">Edit category</h2>
       <form id="cat-edit-form">
         <label for="cat-edit-icon">Icon</label>
-        <input id="cat-edit-icon" type="text" placeholder="🏷️" />
+        <input id="cat-edit-icon" class="emoji-input" type="text" placeholder="🏷️" readonly />
 
         <label for="cat-edit-name">Name</label>
         <input id="cat-edit-name" type="text" placeholder="Category name" />
@@ -843,6 +867,53 @@
       </form>
     </div>
   </div>
+
+  <!-- ================= EDIT WALLET MODAL ================= -->
+  <div class="overlay" id="wallet-edit-overlay">
+    <div class="modal">
+      <h2>Edit wallet</h2>
+      <form id="wallet-edit-form">
+        <label for="wallet-edit-icon">Icon</label>
+        <input id="wallet-edit-icon" class="emoji-input" type="text" placeholder="👛" readonly />
+
+        <label for="wallet-edit-name">Name</label>
+        <input id="wallet-edit-name" type="text" placeholder="Wallet name" />
+
+        <label for="wallet-edit-color">Color</label>
+        <input id="wallet-edit-color" type="color" value="#1f8a4c" style="height:46px;" />
+
+        <label for="wallet-edit-balance">Starting balance (₱)</label>
+        <input id="wallet-edit-balance" type="number" step="100" placeholder="0" />
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="wallet-edit-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================= DELETE WALLET MODAL (choose what happens) ================= -->
+  <div class="overlay" id="wallet-del-overlay">
+    <div class="modal">
+      <h2 id="wallet-del-title">Delete wallet</h2>
+      <p class="page-sub" id="wallet-del-msg" style="margin-bottom:16px;"></p>
+
+      <div id="wallet-del-move-row">
+        <label for="wallet-del-dest">Move its transactions to</label>
+        <select id="wallet-del-dest"></select>
+      </div>
+
+      <div class="modal-actions stack">
+        <button type="button" class="btn btn-primary" id="wallet-del-move">Move transactions, then delete wallet</button>
+        <button type="button" class="btn btn-danger" id="wallet-del-all">Delete wallet AND its transactions</button>
+        <button type="button" class="btn btn-ghost" id="wallet-del-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shared emoji picker popover (positioned next to whichever field you click) -->
+  <div id="emoji-popover"><emoji-picker></emoji-picker></div>
 
   <script>
     // ============================================================
@@ -1004,6 +1075,13 @@
       const { error } = await sb.from("wallets").delete()
         .eq("user_id", currentUserId).eq("name", name);
       if (error) alert(error.message);
+    }
+    // Delete every transaction tied to a wallet (used by "delete everything").
+    async function dbDeleteWalletTransactions(name) {
+      // A row matches via one of three columns; delete each set.
+      await sb.from("transactions").delete().eq("user_id", currentUserId).eq("wallet", name);
+      await sb.from("transactions").delete().eq("user_id", currentUserId).eq("from_wallet", name);
+      await sb.from("transactions").delete().eq("user_id", currentUserId).eq("to_wallet", name);
     }
 
     // ---- Budgets ----
@@ -1260,7 +1338,7 @@
     function renderWallets() {
       setBalanceEl(document.getElementById("w-total"), totalBalance());
 
-      document.getElementById("w-list").innerHTML = wallets.map(w => {
+      document.getElementById("w-list").innerHTML = wallets.map((w, i) => {
         const bal = walletBalance(w.name);
         let inSum = 0, outSum = 0;
         transactions.forEach(t => {
@@ -1273,16 +1351,26 @@
           if (t.type === "income") inSum += t.amount; else outSum += t.amount;
         });
         const balColor = bal < 0 ? "var(--danger)" : "var(--green-dark)";
-        const delBtn = wallets.length > 1
-          ? '<button class="delete-btn wallet-del" data-wallet="' + escapeHtml(w.name) + '" title="Delete">✕</button>'
+        // Kebab menu: Edit always; Delete only when there's another wallet to keep.
+        const ref = "w-" + i;
+        const delItem = wallets.length > 1
+          ? '<button class="kebab-item delete-wallet" data-wallet="' + escapeHtml(w.name) + '">🗑️ Delete</button>'
           : '';
+        const kebab =
+          '<div class="kebab-wrap">' +
+            '<button class="kebab-btn" data-id="' + ref + '" title="More" aria-label="More actions">⋮</button>' +
+            '<div class="kebab-menu" data-menu="' + ref + '">' +
+              '<button class="kebab-item edit-wallet" data-wallet="' + escapeHtml(w.name) + '">✏️ Edit</button>' +
+              delItem +
+            '</div>' +
+          '</div>';
 
         return (
           '<div class="card wallet-card">' +
             '<div class="wallet-head">' +
               '<span class="cat-name"><span class="swatch" style="background:' + w.color + '"></span>' +
                 w.icon + ' ' + escapeHtml(w.name) + '</span>' +
-              delBtn +
+              kebab +
             '</div>' +
             '<div class="wallet-balance" style="color:' + balColor + '">' + peso(bal) + '</div>' +
             '<div class="wallet-stats">' +
@@ -1759,34 +1847,125 @@
       document.getElementById("wallet-color").value = "#1f8a4c";
     });
 
-    async function deleteWallet(name) {
-      if (wallets.length <= 1) {
-        alert("Keep at least one wallet.");
+    // ---- Edit wallet (modal) ----
+    const walletEditOverlay = document.getElementById("wallet-edit-overlay");
+    let editingWallet = null;   // original name of the wallet being edited
+
+    function openWalletModal(name) {
+      const w = wallets.find(x => x.name === name);
+      if (!w) return;
+      editingWallet = name;
+      document.getElementById("wallet-edit-icon").value = w.icon;
+      document.getElementById("wallet-edit-name").value = w.name;
+      document.getElementById("wallet-edit-color").value = w.color;
+      document.getElementById("wallet-edit-balance").value = Number(w.balance) || 0;
+      walletEditOverlay.classList.add("open");
+      document.getElementById("wallet-edit-name").focus();
+    }
+    function closeWalletModal() {
+      walletEditOverlay.classList.remove("open");
+      editingWallet = null;
+    }
+    document.getElementById("wallet-edit-cancel").addEventListener("click", closeWalletModal);
+    walletEditOverlay.addEventListener("click", e => { if (e.target === walletEditOverlay) closeWalletModal(); });
+
+    document.getElementById("wallet-edit-form").addEventListener("submit", async function (e) {
+      e.preventDefault();
+      if (!editingWallet) return;
+      const oldName = editingWallet;
+      const newName = document.getElementById("wallet-edit-name").value.trim();
+      const icon = document.getElementById("wallet-edit-icon").value.trim() || "👛";
+      const color = document.getElementById("wallet-edit-color").value;
+      const bal = parseFloat(document.getElementById("wallet-edit-balance").value);
+      if (!newName) return;
+
+      if (wallets.some(w => w.name.toLowerCase() === newName.toLowerCase() && w.name !== oldName)) {
+        alert('You already have a "' + newName + '" wallet.');
         return;
       }
-      const other = wallets.find(w => w.name !== name);
-      if (!other) { alert("Keep at least one wallet."); return; }
-      const fallback = other.name;
+
+      const w = wallets.find(x => x.name === oldName);
+      if (!w) return;
+
+      // If renamed, carry transactions along (they reference the wallet by name).
+      if (newName !== oldName) {
+        await dbReassignWallet(oldName, newName);
+        transactions.forEach(t => {
+          if (t.wallet === oldName)     t.wallet = newName;
+          if (t.fromWallet === oldName) t.fromWallet = newName;
+          if (t.toWallet === oldName)   t.toWallet = newName;
+        });
+      }
+      w.name = newName; w.icon = icon; w.color = color; w.balance = isNaN(bal) ? 0 : bal;
+      await dbUpdateWallet(oldName, w);
+      closeWalletModal();
+      refreshAll();
+    });
+
+    // ---- Delete wallet (choice modal: move transactions, or delete everything) ----
+    const walletDelOverlay = document.getElementById("wallet-del-overlay");
+    let walletDeleting = null;
+
+    function openWalletDeleteModal(name) {
+      const others = wallets.filter(w => w.name !== name);
+      if (others.length === 0) { alert("Keep at least one wallet."); return; }
+      walletDeleting = name;
+
       const inUse = transactions.filter(t =>
         t.wallet === name || t.fromWallet === name || t.toWallet === name).length;
 
-      const msg = inUse > 0
-        ? inUse + ' transaction(s) use "' + name + '".\nDelete it and move them to "' + fallback + '"?'
-        : 'Delete the "' + name + '" wallet?';
-      if (!confirm(msg)) return;
+      document.getElementById("wallet-del-title").textContent = 'Delete "' + name + '"';
+      document.getElementById("wallet-del-msg").textContent = inUse > 0
+        ? inUse + ' transaction(s) use this wallet. Choose what to do with them:'
+        : 'This wallet has no transactions — it will just be removed.';
 
-      if (inUse > 0) {
-        await dbReassignWallet(name, fallback);
-        transactions.forEach(t => {
-          if (t.wallet === name)     t.wallet = fallback;
-          if (t.fromWallet === name) t.fromWallet = fallback;
-          if (t.toWallet === name)   t.toWallet = fallback;
-        });
-      }
+      const dest = document.getElementById("wallet-del-dest");
+      dest.innerHTML = others.map(w =>
+        '<option value="' + escapeHtml(w.name) + '">' + w.icon + ' ' + escapeHtml(w.name) + '</option>').join("");
+      // Only show the "move to" picker when there's actually something to move.
+      document.getElementById("wallet-del-move-row").style.display = inUse > 0 ? "block" : "none";
+      document.getElementById("wallet-del-move").textContent =
+        inUse > 0 ? "Move transactions, then delete wallet" : "Delete wallet";
+
+      walletDelOverlay.classList.add("open");
+    }
+    function closeWalletDeleteModal() {
+      walletDelOverlay.classList.remove("open");
+      walletDeleting = null;
+    }
+    document.getElementById("wallet-del-cancel").addEventListener("click", closeWalletDeleteModal);
+    walletDelOverlay.addEventListener("click", e => { if (e.target === walletDelOverlay) closeWalletDeleteModal(); });
+
+    // Option A: keep the cash — move its transactions to the chosen wallet, then delete.
+    document.getElementById("wallet-del-move").addEventListener("click", async function () {
+      if (!walletDeleting) return;
+      const name = walletDeleting;
+      const dest = document.getElementById("wallet-del-dest").value;
+      await dbReassignWallet(name, dest);
+      transactions.forEach(t => {
+        if (t.wallet === name)     t.wallet = dest;
+        if (t.fromWallet === name) t.fromWallet = dest;
+        if (t.toWallet === name)   t.toWallet = dest;
+      });
       await dbDeleteWallet(name);
       wallets = wallets.filter(w => w.name !== name);
+      closeWalletDeleteModal();
       refreshAll();
-    }
+    });
+
+    // Option B: delete the wallet AND every transaction tied to it.
+    document.getElementById("wallet-del-all").addEventListener("click", async function () {
+      if (!walletDeleting) return;
+      const name = walletDeleting;
+      if (!confirm('Permanently delete "' + name + '" and ALL its transactions? This cannot be undone.')) return;
+      await dbDeleteWalletTransactions(name);
+      transactions = transactions.filter(t =>
+        t.wallet !== name && t.fromWallet !== name && t.toWallet !== name);
+      await dbDeleteWallet(name);
+      wallets = wallets.filter(w => w.name !== name);
+      closeWalletDeleteModal();
+      refreshAll();
+    });
 
     // ============================================================
     // PAGE SWITCHING (sidebar tabs)
@@ -1964,9 +2143,11 @@
       const delCat = e.target.closest(".delete-cat");
       if (delCat) { deleteCategory(delCat.dataset.kind, delCat.dataset.cat); return; }
 
-      // ----- Wallet delete -----
-      const walletDel = e.target.closest(".wallet-del");
-      if (walletDel) { deleteWallet(walletDel.dataset.wallet); return; }
+      // ----- Wallet edit / delete (kebab) -----
+      const editWallet = e.target.closest(".edit-wallet");
+      if (editWallet) { openWalletModal(editWallet.dataset.wallet); return; }
+      const delWallet = e.target.closest(".delete-wallet");
+      if (delWallet) { openWalletDeleteModal(delWallet.dataset.wallet); return; }
     });
 
     // ============================================================
@@ -1993,6 +2174,47 @@
     // Re-render the transactions list when either filter changes.
     document.getElementById("filter").addEventListener("change", render);
     document.getElementById("cat-filter").addEventListener("change", render);
+
+    // ============================================================
+    // EMOJI PICKER: clicking any .emoji-input opens a shared picker
+    // popover; choosing an emoji writes it back into that field.
+    // ============================================================
+    const emojiPopover = document.getElementById("emoji-popover");
+    const emojiPicker = emojiPopover.querySelector("emoji-picker");
+    let emojiTarget = null;     // the input we'll write the chosen emoji into
+
+    function openEmojiPicker(inputEl) {
+      emojiTarget = inputEl;
+      emojiPopover.style.display = "block";
+      // Position under the field, nudged to stay on screen.
+      const r = inputEl.getBoundingClientRect();
+      const pw = emojiPopover.offsetWidth || 320;
+      const ph = emojiPopover.offsetHeight || 340;
+      let left = Math.min(r.left, window.innerWidth - pw - 8);
+      let top = r.bottom + 6;
+      if (top + ph > window.innerHeight - 8) top = Math.max(8, r.top - ph - 6); // flip above if no room
+      emojiPopover.style.left = Math.max(8, left) + "px";
+      emojiPopover.style.top = top + "px";
+    }
+    function closeEmojiPicker() {
+      emojiPopover.style.display = "none";
+      emojiTarget = null;
+    }
+
+    emojiPicker.addEventListener("emoji-click", (ev) => {
+      if (!emojiTarget) return;
+      emojiTarget.value = ev.detail.unicode;   // the chosen emoji
+      closeEmojiPicker();
+    });
+
+    document.addEventListener("click", (e) => {
+      const field = e.target.closest(".emoji-input");
+      if (field) { e.preventDefault(); openEmojiPicker(field); return; }
+      // Click anywhere else (outside the popover) closes it.
+      if (emojiPopover.style.display === "block" && !e.target.closest("#emoji-popover")) {
+        closeEmojiPicker();
+      }
+    });
 
     // NOTE: we do NOT draw on load anymore. The app renders itself after
     // you log in — see loadAll() called from the auth code below.
