@@ -1,0 +1,2110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PisoWise — Spend smart, not sorry</title>
+  <style>
+    /* =========================================================
+       COLOUR PALETTE (money green, light mode)
+       Defined once here so the whole app stays consistent.
+       ========================================================= */
+    :root {
+      --bg: #f1f5f2;          /* page background, soft green-grey */
+      --surface: #ffffff;      /* cards / sidebar */
+      --ink: #14281d;          /* main text, deep green-black */
+      --muted: #5b7468;        /* secondary text */
+      --green: #1f8a4c;        /* primary money green */
+      --green-dark: #146c3a;   /* hover / accents */
+      --green-soft: #e3f3e8;   /* light green fill */
+      --border: #e2eae5;
+      --danger: #d14343;
+      --blue: #2563eb;         /* transfers (neutral money movement) */
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { height: 100%; }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      color: var(--ink);
+      /* Layered gradient backdrop. The soft colour "blobs" are what makes
+         the frosted-glass cards on top of them look good. */
+      background:
+        radial-gradient(900px 600px at 12% 8%, #c9f5dd 0%, rgba(201,245,221,0) 55%),
+        radial-gradient(800px 600px at 88% 18%, #c7e7ff 0%, rgba(199,231,255,0) 55%),
+        radial-gradient(700px 700px at 80% 95%, #d7f0c9 0%, rgba(215,240,201,0) 60%),
+        linear-gradient(160deg, #eafaf1 0%, #e6f3ee 45%, #e3eefb 100%);
+      background-attachment: fixed;
+      min-height: 100vh;
+    }
+
+    /* =========================================================
+       APP SHELL: sidebar (left) + main content (fills the rest)
+       This is the Google-Drive style two-column layout.
+       ========================================================= */
+    .app {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* ---------- Sidebar ---------- */
+    .sidebar {
+      width: 240px;
+      flex-shrink: 0;
+      /* Frosted glass: translucent white + a blur of whatever is behind it */
+      background: rgba(255, 255, 255, 0.45);
+      backdrop-filter: blur(18px) saturate(150%);
+      -webkit-backdrop-filter: blur(18px) saturate(150%);
+      border-right: 1px solid rgba(255, 255, 255, 0.5);
+      padding: 16px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 800;
+      font-size: 19px;
+      padding: 8px 8px 16px;
+    }
+    /* Gradient text on the NAME only, so the 🐷 emoji stays visible */
+    .brand-text {
+      background: linear-gradient(90deg, #146c3a, #16a34a);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    /* The "+ Add Transaction" button — Drive's "+ New" equivalent */
+    .add-btn {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: linear-gradient(135deg, #1f8a4c 0%, #18a558 55%, #15b36b 100%);
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      padding: 14px 16px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 6px 16px rgba(31,138,76,0.35);
+      margin-bottom: 12px;
+    }
+    .add-btn:hover { filter: brightness(1.06); }
+    .add-btn .plus { font-size: 20px; line-height: 1; }
+
+    /* Sidebar navigation tabs */
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      color: var(--ink);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      background: none;
+      width: 100%;
+      text-align: left;
+    }
+    .nav-item:hover { background: rgba(255, 255, 255, 0.55); }
+    .nav-item.active {
+      background: linear-gradient(135deg, rgba(31,138,76,0.16), rgba(21,179,107,0.10));
+      color: var(--green-dark);
+      font-weight: 600;
+      box-shadow: inset 0 0 0 1px rgba(31,138,76,0.18);
+    }
+    .nav-item .ico { font-size: 18px; width: 22px; text-align: center; }
+
+    /* ---------- Main content ---------- */
+    .main {
+      flex: 1;
+      padding: 28px 32px;
+      max-width: 1100px;
+    }
+    .page-title { font-size: 24px; font-weight: 700; margin: 0 0 4px; }
+    .page-sub { color: var(--muted); font-size: 14px; margin: 0 0 24px; }
+
+    /* Cards */
+    .card {
+      /* Frosted-glass card */
+      background: rgba(255, 255, 255, 0.55);
+      backdrop-filter: blur(14px) saturate(140%);
+      -webkit-backdrop-filter: blur(14px) saturate(140%);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      border-radius: 18px;
+      padding: 20px;
+      box-shadow: 0 8px 30px rgba(20, 80, 50, 0.08);
+    }
+    .grid { display: grid; gap: 16px; }
+    .grid-2 { grid-template-columns: 1fr 1fr; }
+    .grid-3 { grid-template-columns: repeat(3, 1fr); }
+    .grid-4 { grid-template-columns: repeat(4, 1fr); }
+
+    /* Stat card (big number) */
+    .stat-label { color: var(--muted); font-size: 13px; margin-bottom: 6px; }
+    .stat-value {
+      font-size: 26px; font-weight: 800;
+      /* Gradient number */
+      background: linear-gradient(90deg, #146c3a, #0ea371);
+      -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .stat-value.small { font-size: 18px; }
+    /* Plain (non-gradient) money figure so we can colour it green/red freely */
+    .money-stat { font-size: 22px; font-weight: 800; }
+
+    /* ---------- Total balance "hero" number ---------- */
+    .balance-value {
+      font-size: 34px; font-weight: 800;
+      background: linear-gradient(90deg, #146c3a, #0ea371);
+      -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    /* A negative balance shouldn't be money-green — show it red instead. */
+    .balance-value.negative {
+      background: none;
+      -webkit-text-fill-color: var(--danger);
+      color: var(--danger);
+    }
+    .balance-sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+
+    .section-title { font-size: 15px; font-weight: 700; margin: 0 0 14px; }
+
+    /* ---------- Category rows with bars ---------- */
+    .cat-row { margin-bottom: 14px; }
+    .cat-row:last-child { margin-bottom: 0; }
+    .cat-head {
+      display: flex; justify-content: space-between;
+      font-size: 14px; margin-bottom: 6px;
+    }
+    .cat-name { display: flex; align-items: center; gap: 8px; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .bar-track { background: var(--bg); border-radius: 999px; height: 8px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 999px; }
+
+    /* ---------- Transaction list ---------- */
+    .tx {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 12px 0; border-bottom: 1px solid var(--border);
+    }
+    .tx:last-child { border-bottom: none; }
+    .tx-left { display: flex; align-items: center; gap: 12px; }
+    .tx-icon {
+      width: 38px; height: 38px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; background: var(--green-soft);
+    }
+    .tx-icon.income { background: #dff3e6; }
+    .tx-icon.transfer { background: #e7eefb; }
+    .tx-desc { font-weight: 600; font-size: 14px; }
+    .tx-meta { font-size: 12px; color: var(--muted); }
+    .tx-right { display: flex; align-items: center; gap: 8px; }
+    .tx-amount { font-weight: 700; font-size: 14px; white-space: nowrap; }
+    .tx-amount.income { color: var(--green-dark); }
+    .tx-amount.expense { color: var(--ink); }
+    .tx-amount.transfer { color: var(--muted); }
+    .delete-btn {
+      background: none; border: none; color: var(--danger);
+      font-size: 16px; cursor: pointer; padding: 4px 6px; border-radius: 6px;
+    }
+    .delete-btn:hover { background: #fbe9e9; }
+
+    /* ---------- Kebab (⋮) menu on transaction & category rows ---------- */
+    .kebab-wrap { position: relative; }
+    .kebab-btn {
+      background: none; border: none; color: var(--muted);
+      font-size: 20px; line-height: 1; cursor: pointer;
+      padding: 4px 8px; border-radius: 6px;
+    }
+    .kebab-btn:hover { background: var(--bg); color: var(--ink); }
+    .kebab-menu {
+      display: none; position: absolute; right: 0; top: 100%; margin-top: 4px;
+      min-width: 150px; padding: 6px; z-index: 30;
+      background: rgba(255, 255, 255, 0.96);
+      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+      border: 1px solid var(--border); border-radius: 12px;
+      box-shadow: 0 12px 32px rgba(20, 60, 40, 0.18);
+    }
+    .kebab-menu.open { display: block; }
+    .kebab-item {
+      display: flex; align-items: center; gap: 9px; width: 100%;
+      text-align: left; background: none; border: none; cursor: pointer;
+      padding: 9px 10px; border-radius: 8px; font-size: 14px; color: var(--ink);
+    }
+    .kebab-item:hover { background: var(--green-soft); }
+    .kebab-item.delete-tx, .kebab-item.delete-cat { color: var(--danger); }
+    .kebab-item.delete-tx:hover, .kebab-item.delete-cat:hover { background: #fbe9e9; }
+
+    .empty { color: var(--muted); font-size: 14px; text-align: center; padding: 24px 0; }
+
+    /* Filter dropdowns on Transactions page */
+    .toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+    select.filter {
+      padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px;
+      font-size: 14px; background: #fff; color: var(--ink);
+    }
+
+    /* =========================================================
+       DONUT PIE CHART (built with CSS conic-gradient — no library)
+       ========================================================= */
+    .pie-wrap { display: flex; gap: 28px; align-items: center; flex-wrap: wrap; }
+    .donut {
+      width: 190px; height: 190px; border-radius: 50%;
+      position: relative; flex-shrink: 0;
+      /* the conic-gradient (the colored slices) is set from JavaScript */
+      background: var(--bg);
+    }
+    .donut-hole {
+      position: absolute; inset: 30px;        /* the frosted middle of the donut */
+      background: rgba(255, 255, 255, 0.65);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      border-radius: 50%;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.7);
+    }
+    .donut-hole .h-label { font-size: 11px; color: var(--muted); }
+    .donut-hole .h-value { font-size: 17px; font-weight: 700; color: var(--green-dark); }
+
+    .legend { flex: 1; min-width: 170px; }
+    .legend-row {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 13px; padding: 7px 0; border-bottom: 1px solid var(--border);
+    }
+    .legend-row:last-child { border-bottom: none; }
+    .legend-left { display: flex; align-items: center; gap: 8px; }
+    .legend-pct { color: var(--muted); }
+
+    /* ---------- Vertical bar chart (monthly spending / compare) ---------- */
+    .barchart { display: flex; gap: 12px; height: 180px; }
+    .bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; }
+    .bar-area { flex: 1; width: 100%; display: flex; align-items: flex-end; justify-content: center; }
+    .vbar {
+      width: 58%; background: var(--green);
+      border-radius: 6px 6px 0 0; min-height: 3px;
+      transition: background 0.15s;
+    }
+    .vbar:hover { background: var(--green-dark); }
+    .vlabel { font-size: 11px; color: var(--muted); margin-top: 8px; }
+
+    /* Grouped income-vs-expense bars share a column */
+    .bar-pair { display: flex; gap: 4px; align-items: flex-end; justify-content: center; height: 100%; width: 100%; }
+    .bar-pair .vbar { width: 16px; }
+    .vbar.income { background: var(--green); }
+    .vbar.income:hover { background: var(--green-dark); }
+    .vbar.expense { background: var(--danger); }
+    .vbar.expense:hover { background: #b5352f; }
+    .chart-legend { display: flex; gap: 16px; font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+    .chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+    /* ---------- Manage categories ---------- */
+    .cat-manage-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 10px 0; border-bottom: 1px solid var(--border);
+    }
+    .cat-manage-row:last-of-type { border-bottom: none; }
+    .swatch { width: 16px; height: 16px; border-radius: 5px; display: inline-block; }
+    .cat-form {
+      display: flex; gap: 8px; align-items: center;
+      margin-top: 14px; flex-wrap: wrap;
+    }
+    .cat-form input[type="text"] {
+      flex: 1; min-width: 120px; font-size: 15px; padding: 10px 12px;
+      border: 1px solid var(--border); border-radius: 10px;
+      background: rgba(255,255,255,0.7); color: var(--ink);
+    }
+    .cat-form input[type="number"] {
+      flex: 0 0 130px; font-size: 15px; padding: 10px 12px;
+      border: 1px solid var(--border); border-radius: 10px;
+      background: rgba(255,255,255,0.7); color: var(--ink);
+    }
+    .cat-icon-input { flex: 0 0 56px !important; min-width: 0 !important; text-align: center; }
+    .cat-form input[type="color"] {
+      width: 44px; height: 42px; padding: 2px; border: 1px solid var(--border);
+      border-radius: 10px; background: #fff; cursor: pointer;
+    }
+    .cat-add-btn { flex: 0 0 auto; padding: 10px 18px; }
+
+    /* =========================================================
+       BUDGETS (monthly spending limit per category)
+       ========================================================= */
+    .budget-row { margin-bottom: 16px; }
+    .budget-row:last-child { margin-bottom: 0; }
+    .budget-head {
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 10px; font-size: 14px; margin-bottom: 8px;
+    }
+    .budget-input-wrap {
+      display: flex; align-items: center; gap: 4px;
+      font-size: 13px; color: var(--muted); white-space: nowrap;
+    }
+    .budget-input {
+      width: 96px; font-size: 14px; padding: 6px 8px; text-align: right;
+      border: 1px solid var(--border); border-radius: 8px;
+      background: rgba(255, 255, 255, 0.7); color: var(--ink);
+    }
+    .budget-meta { font-size: 12px; color: var(--muted); margin-top: 6px; }
+    .budget-meta .over { color: var(--danger); font-weight: 600; }
+    .budget-meta .left { color: var(--green-dark); font-weight: 600; }
+
+    /* The big spent/budget figure on the dashboard summary card */
+    .budget-summary-top {
+      display: flex; justify-content: space-between; align-items: baseline;
+      gap: 12px; margin-bottom: 10px; flex-wrap: wrap;
+    }
+    .budget-summary-spent { font-size: 22px; font-weight: 800; }
+    .budget-summary-of { font-size: 14px; color: var(--muted); font-weight: 500; }
+
+    /* =========================================================
+       WALLETS (accounts / assets)
+       ========================================================= */
+    .wallet-card { display: flex; flex-direction: column; gap: 10px; }
+    .wallet-head { display: flex; justify-content: space-between; align-items: center; }
+    .wallet-balance { font-size: 24px; font-weight: 800; }
+    .wallet-stats { display: flex; gap: 16px; font-size: 13px; }
+    .wallet-in { color: var(--green-dark); font-weight: 600; }
+    .wallet-out { color: var(--danger); font-weight: 600; }
+    .wallet-starting {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 13px; color: var(--muted); margin-top: 2px;
+    }
+    .wallet-start-input {
+      width: 110px; font-size: 14px; padding: 6px 8px; text-align: right;
+      border: 1px solid var(--border); border-radius: 8px;
+      background: rgba(255, 255, 255, 0.7); color: var(--ink);
+    }
+
+    /* =========================================================
+       MODAL (the "+ Add Transaction" pop-up form)
+       ========================================================= */
+    .overlay {
+      position: fixed; inset: 0;
+      background: rgba(18, 50, 35, 0.35);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      display: none; align-items: center; justify-content: center;
+      padding: 16px; z-index: 50;
+    }
+    .overlay.open { display: flex; }
+    .modal {
+      background: rgba(255, 255, 255, 0.8);
+      backdrop-filter: blur(22px) saturate(160%);
+      -webkit-backdrop-filter: blur(22px) saturate(160%);
+      border: 1px solid rgba(255, 255, 255, 0.7);
+      border-radius: 20px; padding: 24px;
+      width: 100%; max-width: 420px;
+      box-shadow: 0 20px 60px rgba(20, 60, 40, 0.25);
+    }
+    .modal h2 { margin: 0 0 18px; font-size: 18px; }
+    .modal label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 5px; }
+    .modal input, .modal select {
+      width: 100%; font-size: 16px; padding: 12px;
+      border: 1px solid var(--border); border-radius: 10px;
+      margin-bottom: 14px; background: #fff; color: var(--ink);
+    }
+    .modal-actions { display: flex; gap: 10px; margin-top: 4px; }
+    .btn {
+      flex: 1; padding: 12px; border-radius: 10px; font-size: 15px;
+      font-weight: 600; cursor: pointer; border: none;
+    }
+    .btn-primary { background: linear-gradient(135deg, #1f8a4c, #15b36b); color: #fff; }
+    .btn-primary:hover { filter: brightness(1.06); }
+    .btn-ghost { background: var(--bg); color: var(--ink); }
+
+    /* Expense / Income / Transfer segmented tabs at the top of the modal */
+    .tx-tabs {
+      display: flex; gap: 6px; margin-bottom: 18px;
+      background: var(--bg); padding: 5px; border-radius: 12px;
+    }
+    .tx-tab {
+      flex: 1; padding: 10px; border: none; background: none;
+      border-radius: 9px; font-size: 14px; font-weight: 600;
+      color: var(--muted); cursor: pointer;
+    }
+    .tx-tab.active { background: #fff; box-shadow: 0 1px 4px rgba(20,60,40,0.12); }
+    .tx-tab[data-type="expense"].active { color: var(--danger); }
+    .tx-tab[data-type="income"].active { color: var(--green-dark); }
+    .tx-tab[data-type="transfer"].active { color: var(--blue); }
+
+    .hidden { display: none !important; }
+
+    /* =========================================================
+       AUTH SCREEN (login / signup)
+       ========================================================= */
+    .auth-screen {
+      min-height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    .auth-card { width: 100%; max-width: 380px; }
+    .auth-brand {
+      display: flex; align-items: center; justify-content: center;
+      gap: 8px; margin-bottom: 4px;
+    }
+    .auth-card label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 5px; }
+    .auth-card input {
+      width: 100%; font-size: 16px; padding: 12px;
+      border: 1px solid var(--border); border-radius: 10px;
+      margin-bottom: 14px; background: #fff; color: var(--ink);
+    }
+    .auth-error { font-size: 13px; min-height: 18px; margin-bottom: 8px; color: var(--danger); }
+    .auth-toggle { text-align: center; font-size: 13px; color: var(--muted); margin-top: 14px; }
+    .auth-toggle a { color: var(--green-dark); font-weight: 600; cursor: pointer; }
+
+    /* Sidebar account row */
+    .user-row {
+      font-size: 12px; color: var(--muted); padding: 4px 12px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+
+    /* =========================================================
+       MOBILE: turn the sidebar into a bottom tab bar (phone-friendly)
+       ========================================================= */
+    @media (max-width: 720px) {
+      .app { flex-direction: column; }
+      .main { padding: 18px 16px 90px; } /* leave room for bottom bar */
+      .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+
+      .sidebar {
+        position: fixed; bottom: 0; left: 0; right: 0; top: auto;
+        height: auto; width: 100%;
+        flex-direction: row; align-items: center;
+        border-right: none; border-top: 1px solid var(--border);
+        padding: 8px; gap: 4px; z-index: 40;
+      }
+      .brand { display: none; }
+      .nav-item { flex-direction: column; gap: 2px; font-size: 11px; padding: 6px 4px; flex: 1; }
+      .nav-item .ico { font-size: 20px; width: auto; }
+
+      /* On phones the Add button becomes a floating round + button */
+      .add-btn {
+        position: fixed; right: 18px; bottom: 78px; z-index: 45;
+        width: 56px; height: 56px; border-radius: 50%; padding: 0;
+        justify-content: center; margin: 0;
+        box-shadow: 0 4px 12px rgba(31,138,76,0.4);
+      }
+      .add-btn .label { display: none; }
+      .add-btn .plus { font-size: 26px; }
+
+      .user-row { display: none; }              /* no room on the bottom bar */
+      #logout-btn { flex: 0 0 auto; }           /* keep log out compact */
+    }
+  </style>
+
+  <!-- Supabase client library (loaded from a CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+  <!-- ================= AUTH SCREEN (shown until you log in) ================= -->
+  <div class="auth-screen" id="auth-screen">
+    <div class="card auth-card">
+      <div class="auth-brand">
+        <span style="font-size:30px;">🐷</span>
+        <span class="brand-text" style="font-size:24px;font-weight:800;">PisoWise</span>
+      </div>
+      <h2 id="auth-title" style="margin:6px 0 18px;font-size:18px;text-align:center;">Welcome back</h2>
+      <form id="auth-form">
+        <label for="auth-email">Email</label>
+        <input id="auth-email" type="email" placeholder="you@example.com" required />
+
+        <label for="auth-password">Password</label>
+        <input id="auth-password" type="password" placeholder="••••••••" required minlength="6" />
+
+        <div class="auth-error" id="auth-error"></div>
+        <button type="submit" class="btn btn-primary" id="auth-submit" style="width:100%;">Log in</button>
+      </form>
+      <div class="auth-toggle">
+        <span id="auth-toggle-text">New here?</span>
+        <a id="auth-toggle-link">Create an account</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="app" id="app" style="display:none;">
+
+    <!-- ================= SIDEBAR ================= -->
+    <aside class="sidebar">
+      <div class="brand"><span>🐷</span><span class="brand-text">PisoWise</span></div>
+
+      <!-- The "+ Add Transaction" button (Drive's "+ New") -->
+      <button class="add-btn" id="open-modal">
+        <span class="plus">＋</span><span class="label">Add Transaction</span>
+      </button>
+
+      <!-- Navigation tabs -->
+      <button class="nav-item active" data-page="dashboard">
+        <span class="ico">📊</span><span>Dashboard</span>
+      </button>
+      <button class="nav-item" data-page="transactions">
+        <span class="ico">🧾</span><span>Transactions</span>
+      </button>
+      <button class="nav-item" data-page="wallet">
+        <span class="ico">👛</span><span>Wallets</span>
+      </button>
+      <button class="nav-item" data-page="categories">
+        <span class="ico">🗂️</span><span>Configure</span>
+      </button>
+      <button class="nav-item" data-page="insights">
+        <span class="ico">📈</span><span>Insights</span>
+      </button>
+
+      <!-- Pushed to the bottom: who's logged in + log out -->
+      <div style="margin-top:auto;"></div>
+      <div class="user-row" id="user-row"></div>
+      <button class="nav-item" id="logout-btn">
+        <span class="ico">🚪</span><span>Log out</span>
+      </button>
+    </aside>
+
+    <!-- ================= MAIN CONTENT ================= -->
+    <main class="main">
+
+      <!-- ----- DASHBOARD ----- -->
+      <section id="page-dashboard" class="page">
+        <h1 class="page-title">Dashboard</h1>
+        <p class="page-sub">A quick look at your money.</p>
+
+        <!-- Total balance across all wallets -->
+        <div class="card" style="margin-bottom:16px;">
+          <div class="stat-label">Total balance</div>
+          <div class="balance-value" id="d-balance">₱0.00</div>
+          <div class="balance-sub" id="d-balance-sub"></div>
+        </div>
+
+        <div class="grid grid-3" style="margin-bottom:16px;">
+          <div class="card">
+            <div class="stat-label">Income this month</div>
+            <div class="money-stat" id="d-month-income" style="color:var(--green-dark)">+₱0.00</div>
+          </div>
+          <div class="card">
+            <div class="stat-label">Expenses this month</div>
+            <div class="money-stat" id="d-month-expense" style="color:var(--danger)">−₱0.00</div>
+          </div>
+          <div class="card">
+            <div class="stat-label">Net this month</div>
+            <div class="money-stat" id="d-month-net">₱0.00</div>
+          </div>
+        </div>
+
+        <!-- This month's budget progress (only meaningful once limits are set) -->
+        <div class="card" style="margin-bottom:16px;">
+          <h3 class="section-title">This month's budget</h3>
+          <div id="d-budget"></div>
+        </div>
+
+        <div class="grid grid-2">
+          <div class="card">
+            <h3 class="section-title">Spending breakdown</h3>
+            <div id="d-pie"></div>
+          </div>
+          <div class="card">
+            <h3 class="section-title">Recent activity</h3>
+            <div id="d-recent"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ----- TRANSACTIONS ----- -->
+      <section id="page-transactions" class="page hidden">
+        <h1 class="page-title">Transactions</h1>
+        <p class="page-sub">Every income, expense and transfer you've logged.</p>
+
+        <div class="toolbar">
+          <label for="filter" style="font-size:14px;color:var(--muted);">Show:</label>
+          <select id="filter" class="filter">
+            <option value="all">All types</option>
+            <option value="income">Income</option>
+            <option value="expense">Expenses</option>
+            <option value="transfer">Transfers</option>
+          </select>
+          <select id="cat-filter" class="filter">
+            <option value="all">All categories</option>
+          </select>
+        </div>
+
+        <div class="card">
+          <div id="t-list"></div>
+        </div>
+      </section>
+
+      <!-- ----- WALLETS ----- -->
+      <section id="page-wallet" class="page hidden">
+        <h1 class="page-title">Wallets</h1>
+        <p class="page-sub">Your accounts and assets. Income adds to a wallet; expenses are taken from it; transfers move between them.</p>
+
+        <div class="card" style="margin-bottom:16px;">
+          <div class="stat-label">Total balance</div>
+          <div class="balance-value" id="w-total">₱0.00</div>
+        </div>
+
+        <div id="w-list" class="grid grid-2" style="margin-bottom:16px;"></div>
+
+        <div class="card">
+          <h3 class="section-title">Add a wallet</h3>
+          <form id="wallet-form" class="cat-form">
+            <input id="wallet-icon" class="cat-icon-input" type="text" maxlength="2" value="👛" title="Pick an emoji" />
+            <input id="wallet-name" type="text" placeholder="Wallet name (e.g. GCash)" required />
+            <input id="wallet-start" type="number" step="100" placeholder="Starting ₱" />
+            <input id="wallet-color" type="color" value="#1f8a4c" title="Pick a color" />
+            <button type="submit" class="btn btn-primary cat-add-btn">Add</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- ----- CATEGORIES ----- -->
+      <section id="page-categories" class="page hidden">
+        <h1 class="page-title">Configure</h1>
+        <p class="page-sub">Set up your categories and budgets — add, edit, recolor, or remove them.</p>
+
+        <!-- Expense categories -->
+        <div class="card" style="margin-bottom:16px;">
+          <h3 class="section-title">Your expense categories</h3>
+          <div id="c-manage"></div>
+
+          <form id="cat-form" class="cat-form">
+            <input id="cat-icon" class="cat-icon-input" type="text" maxlength="2" value="🏷️" title="Pick an emoji" />
+            <input id="cat-name" type="text" placeholder="New expense category" required />
+            <input id="cat-color" type="color" value="#1f8a4c" title="Pick a color" />
+            <button type="submit" class="btn btn-primary cat-add-btn">Add</button>
+          </form>
+        </div>
+
+        <!-- Income categories -->
+        <div class="card" style="margin-bottom:16px;">
+          <h3 class="section-title">Your income categories</h3>
+          <div id="c-income-manage"></div>
+
+          <form id="income-cat-form" class="cat-form">
+            <input id="income-cat-icon" class="cat-icon-input" type="text" maxlength="2" value="💰" title="Pick an emoji" />
+            <input id="income-cat-name" type="text" placeholder="New income category" required />
+            <input id="income-cat-color" type="color" value="#1f8a4c" title="Pick a color" />
+            <button type="submit" class="btn btn-primary cat-add-btn">Add</button>
+          </form>
+        </div>
+
+        <!-- Monthly budgets -->
+        <div class="card" style="margin-bottom:16px;">
+          <h3 class="section-title">Monthly budgets</h3>
+          <p class="page-sub" style="margin:-6px 0 16px;">Set a limit per category. Leave blank for no limit. Resets each month.</p>
+          <div id="c-budgets"></div>
+        </div>
+
+        <!-- Spending split -->
+        <div class="card">
+          <h3 class="section-title">Spending by category</h3>
+          <div id="c-breakdown"></div>
+        </div>
+      </section>
+
+      <!-- ----- INSIGHTS ----- -->
+      <section id="page-insights" class="page hidden">
+        <h1 class="page-title">Insights</h1>
+        <p class="page-sub">A few useful numbers about your money habits.</p>
+
+        <!-- Income vs expenses -->
+        <div class="card" style="margin-bottom:16px;">
+          <h3 class="section-title">Income vs expenses (last 6 months)</h3>
+          <div class="chart-legend">
+            <span><span class="dot" style="background:var(--green)"></span> Income</span>
+            <span><span class="dot" style="background:var(--danger)"></span> Expenses</span>
+          </div>
+          <div id="i-compare"></div>
+        </div>
+
+        <!-- Savings / income numbers -->
+        <div class="grid grid-3" style="margin-bottom:16px;">
+          <div class="card">
+            <div class="stat-label">Savings rate (this month)</div>
+            <div class="money-stat" id="i-savings-rate">—</div>
+          </div>
+          <div class="card">
+            <div class="stat-label">Total saved (all time)</div>
+            <div class="money-stat" id="i-saved">₱0.00</div>
+          </div>
+          <div class="card">
+            <div class="stat-label">Avg monthly income</div>
+            <div class="money-stat" id="i-avg-income" style="color:var(--green-dark)">₱0.00</div>
+          </div>
+        </div>
+
+        <!-- Monthly spending trend (bar chart) -->
+        <div class="card" style="margin-bottom:16px;">
+          <h3 class="section-title">Monthly spending (last 6 months)</h3>
+          <div id="i-monthly"></div>
+        </div>
+
+        <div class="grid grid-2" style="margin-bottom:16px;">
+          <div class="card">
+            <div class="stat-label">Top category</div>
+            <div class="stat-value small" id="i-top">—</div>
+          </div>
+          <div class="card">
+            <div class="stat-label">Average per expense</div>
+            <div class="stat-value small" id="i-avg">₱0.00</div>
+          </div>
+          <div class="card">
+            <div class="stat-label">Biggest single expense</div>
+            <div class="stat-value small" id="i-biggest">—</div>
+          </div>
+          <div class="card">
+            <div class="stat-label">This month vs all time</div>
+            <div class="stat-value small" id="i-month">₱0.00</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 class="section-title">Spending by category</h3>
+          <div id="i-breakdown"></div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ================= ADD TRANSACTION MODAL ================= -->
+  <div class="overlay" id="overlay">
+    <div class="modal">
+      <!-- Three tabs: money OUT (expense), money IN (income), or moved between wallets (transfer) -->
+      <div class="tx-tabs">
+        <button type="button" class="tx-tab active" data-type="expense">Expense</button>
+        <button type="button" class="tx-tab" data-type="income">Income</button>
+        <button type="button" class="tx-tab" data-type="transfer">Transfer</button>
+      </div>
+
+      <form id="expense-form">
+        <label for="desc">Description</label>
+        <input id="desc" type="text" placeholder="e.g. Lunch at Jollibee" />
+
+        <label for="amount">Amount (₱)</label>
+        <input id="amount" type="number" step="0.01" min="0.01" placeholder="e.g. 150" required />
+
+        <div id="field-category">
+          <label for="category">Category</label>
+          <select id="category"></select>
+        </div>
+
+        <div id="field-wallet">
+          <label for="wallet">Wallet</label>
+          <select id="wallet"></select>
+        </div>
+
+        <div id="field-from" class="hidden">
+          <label for="wallet-from">From wallet</label>
+          <select id="wallet-from"></select>
+        </div>
+
+        <div id="field-to" class="hidden">
+          <label for="wallet-to">To wallet</label>
+          <select id="wallet-to"></select>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="cancel-modal">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="modal-submit">Add Expense</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================= EDIT CATEGORY MODAL ================= -->
+  <div class="overlay" id="cat-overlay">
+    <div class="modal">
+      <h2 id="cat-modal-title">Edit category</h2>
+      <form id="cat-edit-form">
+        <label for="cat-edit-icon">Icon</label>
+        <input id="cat-edit-icon" type="text" maxlength="2" placeholder="🏷️" />
+
+        <label for="cat-edit-name">Name</label>
+        <input id="cat-edit-name" type="text" placeholder="Category name" />
+
+        <label for="cat-edit-color">Color</label>
+        <input id="cat-edit-color" type="color" value="#1f8a4c" style="height:46px;" />
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="cat-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // ============================================================
+    // DATA SETUP
+    // ============================================================
+    const STORAGE_KEY     = "expense-tracker-data";        // all transactions (income + expense + transfer)
+    const CAT_KEY         = "expense-tracker-categories";   // expense categories
+    const INCOME_CAT_KEY  = "expense-tracker-income-categories";
+    const BUDGET_KEY      = "expense-tracker-budgets";
+    const WALLET_KEY      = "expense-tracker-wallets";
+
+    // The starter EXPENSE categories — used the first time you open the app.
+    const DEFAULT_CATEGORIES = [
+      { name: "Food",      icon: "🍔", color: "#f59e0b" },
+      { name: "Transport", icon: "🚌", color: "#0ea5e9" },
+      { name: "Bills",     icon: "🧾", color: "#ef4444" },
+      { name: "Shopping",  icon: "🛍️", color: "#8b5cf6" },
+      { name: "Other",     icon: "📦", color: "#64748b" }
+    ];
+
+    // Starter INCOME categories (the kinds of money coming in).
+    const DEFAULT_INCOME_CATEGORIES = [
+      { name: "Salary",    icon: "💼", color: "#1f8a4c" },
+      { name: "Business",  icon: "🏪", color: "#0ea5e9" },
+      { name: "Freelance", icon: "💻", color: "#8b5cf6" },
+      { name: "Gift",      icon: "🎁", color: "#f59e0b" },
+      { name: "Other",     icon: "➕", color: "#64748b" }
+    ];
+
+    // The first wallet everyone starts with.
+    const DEFAULT_WALLETS = [
+      { name: "Cash", icon: "💵", color: "#1f8a4c", balance: 0 }
+    ];
+
+    // Load saved data (or start fresh).
+    // The data now lives in Supabase. These in-memory copies start empty
+    // and get filled by loadAll() right after you log in.
+    let transactions     = [];
+    let categories       = [];
+    let incomeCategories = [];
+    let wallets          = [];
+    let budgets          = {};
+    let currentUserId    = null;   // the logged-in user's id (set by the auth code)
+
+    // Look up a category's icon/color by name + type.
+    function catInfo(name, type) {
+      const list = type === "income" ? incomeCategories : categories;
+      return list.find(c => c.name === name) ||
+             { name: name, icon: type === "income" ? "💰" : "📦", color: "#64748b" };
+    }
+    // Look up a wallet by name (with a graceful fallback).
+    function walletInfo(name) {
+      return wallets.find(w => w.name === name) ||
+             { name: name, icon: "👛", color: "#64748b", balance: 0 };
+    }
+
+    // ============================================================
+    // HELPERS
+    // ============================================================
+    function peso(n) {
+      return "₱" + n.toLocaleString("en-PH", {
+        minimumFractionDigits: 2, maximumFractionDigits: 2
+      });
+    }
+    // ============================================================
+    // SUPABASE DATA LAYER
+    // ------------------------------------------------------------
+    // The render code reads from the in-memory arrays above. These
+    // helpers keep those arrays in sync with the cloud: every
+    // add/edit/delete writes the specific change to Supabase.
+    // `sb` and `currentUserId` are set by the auth code at the bottom.
+    // ============================================================
+
+    // Convert a database row <-> the shape the app uses in memory.
+    function txFromRow(r) {
+      return {
+        id: r.id,
+        type: r.type,
+        desc: r.description || "",
+        amount: Number(r.amount),
+        category: r.category,
+        wallet: r.wallet,
+        fromWallet: r.from_wallet,
+        toWallet: r.to_wallet,
+        date: r.occurred_at,
+        dateLabel: new Date(r.occurred_at).toLocaleDateString("en-PH", { month: "short", day: "numeric" })
+      };
+    }
+    function txToRow(t) {
+      return {
+        user_id: currentUserId,
+        type: t.type,
+        description: t.desc || null,
+        amount: t.amount,
+        category: t.category != null ? t.category : null,
+        wallet: t.wallet != null ? t.wallet : null,
+        from_wallet: t.fromWallet != null ? t.fromWallet : null,
+        to_wallet: t.toWallet != null ? t.toWallet : null,
+        occurred_at: t.date
+      };
+    }
+
+    // ---- Transactions ----
+    async function dbInsertTransaction(t) {
+      const { data, error } = await sb.from("transactions").insert(txToRow(t)).select().single();
+      if (error) { alert("Couldn't save: " + error.message); return null; }
+      return data.id;                       // the database-generated id
+    }
+    async function dbUpdateTransaction(t) {
+      const { error } = await sb.from("transactions").update(txToRow(t)).eq("id", t.id);
+      if (error) alert("Couldn't update: " + error.message);
+    }
+    async function dbDeleteTransaction(id) {
+      const { error } = await sb.from("transactions").delete().eq("id", id);
+      if (error) alert("Couldn't delete: " + error.message);
+    }
+    async function dbReassignTxCategory(kind, oldName, newName) {
+      const { error } = await sb.from("transactions").update({ category: newName })
+        .eq("user_id", currentUserId).eq("type", kind).eq("category", oldName);
+      if (error) alert(error.message);
+    }
+    async function dbReassignWallet(oldName, newName) {
+      await sb.from("transactions").update({ wallet: newName }).eq("user_id", currentUserId).eq("wallet", oldName);
+      await sb.from("transactions").update({ from_wallet: newName }).eq("user_id", currentUserId).eq("from_wallet", oldName);
+      await sb.from("transactions").update({ to_wallet: newName }).eq("user_id", currentUserId).eq("to_wallet", oldName);
+    }
+
+    // ---- Categories ----
+    async function dbInsertCategory(kind, c) {
+      const { error } = await sb.from("categories")
+        .insert({ user_id: currentUserId, kind: kind, name: c.name, icon: c.icon, color: c.color });
+      if (error) alert(error.message);
+    }
+    async function dbUpdateCategory(kind, oldName, c) {
+      const { error } = await sb.from("categories")
+        .update({ name: c.name, icon: c.icon, color: c.color })
+        .eq("user_id", currentUserId).eq("kind", kind).eq("name", oldName);
+      if (error) alert(error.message);
+    }
+    async function dbDeleteCategory(kind, name) {
+      const { error } = await sb.from("categories").delete()
+        .eq("user_id", currentUserId).eq("kind", kind).eq("name", name);
+      if (error) alert(error.message);
+    }
+
+    // ---- Wallets ----
+    async function dbInsertWallet(w) {
+      const { error } = await sb.from("wallets")
+        .insert({ user_id: currentUserId, name: w.name, icon: w.icon, color: w.color, balance: w.balance });
+      if (error) alert(error.message);
+    }
+    async function dbUpdateWallet(oldName, w) {
+      const { error } = await sb.from("wallets")
+        .update({ name: w.name, icon: w.icon, color: w.color, balance: w.balance })
+        .eq("user_id", currentUserId).eq("name", oldName);
+      if (error) alert(error.message);
+    }
+    async function dbDeleteWallet(name) {
+      const { error } = await sb.from("wallets").delete()
+        .eq("user_id", currentUserId).eq("name", name);
+      if (error) alert(error.message);
+    }
+
+    // ---- Budgets ----
+    async function dbSetBudget(category, amount) {
+      const { error } = await sb.from("budgets")
+        .upsert({ user_id: currentUserId, category: category, amount: amount }, { onConflict: "user_id,category" });
+      if (error) alert(error.message);
+    }
+    async function dbDeleteBudget(category) {
+      const { error } = await sb.from("budgets").delete()
+        .eq("user_id", currentUserId).eq("category", category);
+      if (error) alert(error.message);
+    }
+    async function dbRenameBudget(oldName, newName) {
+      const { error } = await sb.from("budgets").update({ category: newName })
+        .eq("user_id", currentUserId).eq("category", oldName);
+      if (error) alert(error.message);
+    }
+
+    // ---- Load everything for the logged-in user ----
+    let loadingData = false;
+    async function fetchAndPopulate() {
+      const [wRes, cRes, tRes, bRes] = await Promise.all([
+        sb.from("wallets").select("*").order("created_at"),
+        sb.from("categories").select("*").order("created_at"),
+        sb.from("transactions").select("*").order("occurred_at"),
+        sb.from("budgets").select("*")
+      ]);
+      const err = wRes.error || cRes.error || tRes.error || bRes.error;
+      if (err) throw err;
+
+      wallets = wRes.data.map(r => ({ name: r.name, icon: r.icon, color: r.color, balance: Number(r.balance) }));
+      categories = cRes.data.filter(r => r.kind === "expense").map(r => ({ name: r.name, icon: r.icon, color: r.color }));
+      incomeCategories = cRes.data.filter(r => r.kind === "income").map(r => ({ name: r.name, icon: r.icon, color: r.color }));
+      transactions = tRes.data.map(txFromRow);
+      budgets = {};
+      bRes.data.forEach(r => { budgets[r.category] = Number(r.amount); });
+    }
+    // Brand-new accounts get the starter categories + first wallet.
+    async function seedDefaults() {
+      const catRows = [];
+      DEFAULT_CATEGORIES.forEach(c => catRows.push({ user_id: currentUserId, kind: "expense", name: c.name, icon: c.icon, color: c.color }));
+      DEFAULT_INCOME_CATEGORIES.forEach(c => catRows.push({ user_id: currentUserId, kind: "income", name: c.name, icon: c.icon, color: c.color }));
+      await sb.from("categories").insert(catRows);
+      await sb.from("wallets").insert(DEFAULT_WALLETS.map(w =>
+        ({ user_id: currentUserId, name: w.name, icon: w.icon, color: w.color, balance: w.balance })));
+    }
+    async function loadAll() {
+      if (loadingData) return;          // don't run two loads at once
+      loadingData = true;
+      try {
+        await fetchAndPopulate();
+        if (wallets.length === 0 && categories.length === 0 && incomeCategories.length === 0) {
+          await seedDefaults();
+          await fetchAndPopulate();
+        }
+        refreshAll();
+      } catch (e) {
+        console.error(e);
+        alert("Couldn't load your data: " + (e.message || e));
+      } finally {
+        loadingData = false;
+      }
+    }
+
+    function budgetColor(spent, budget) {
+      if (budget <= 0) return "var(--muted)";
+      const ratio = spent / budget;
+      if (ratio >= 1)   return "#d14343"; // over budget
+      if (ratio >= 0.8) return "#e0a300"; // getting close
+      return "#1f8a4c";                    // comfortably under
+    }
+    function escapeHtml(text) {
+      const d = document.createElement("div");
+      d.textContent = text;
+      return d.innerHTML;
+    }
+    function isThisMonth(iso) {
+      const d = new Date(iso);
+      const now = new Date();
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    }
+    function expenseItems() { return transactions.filter(t => t.type === "expense"); }
+    function incomeItems()  { return transactions.filter(t => t.type === "income"); }
+
+    // ---- Wallet maths ----
+    // balance = starting balance + income in − expenses out ± transfers
+    function walletBalance(name) {
+      const w = wallets.find(x => x.name === name);
+      let bal = w ? (Number(w.balance) || 0) : 0;
+      transactions.forEach(t => {
+        if (t.type === "transfer") {
+          if (t.fromWallet === name) bal -= t.amount;
+          if (t.toWallet === name)   bal += t.amount;
+          return;
+        }
+        if (t.wallet !== name) return;
+        bal += t.type === "income" ? t.amount : -t.amount;
+      });
+      return bal;
+    }
+    function totalBalance() {
+      return wallets.reduce((s, w) => s + walletBalance(w.name), 0);
+    }
+    function setBalanceEl(el, amount) {
+      el.textContent = peso(amount);
+      el.classList.toggle("negative", amount < 0);
+    }
+
+    // Build one transaction row's HTML. showActions adds the kebab (⋮) menu.
+    function txRowHtml(t, showActions) {
+      let actions = "";
+      if (showActions) {
+        actions =
+          '<div class="kebab-wrap">' +
+            '<button class="kebab-btn" data-id="' + t.id + '" title="More" aria-label="More actions">⋮</button>' +
+            '<div class="kebab-menu" data-menu="' + t.id + '">' +
+              '<button class="kebab-item edit-tx" data-id="' + t.id + '">✏️ Edit</button>' +
+              '<button class="kebab-item delete-tx" data-id="' + t.id + '">🗑️ Delete</button>' +
+            '</div>' +
+          '</div>';
+      }
+
+      let iconChar, iconClass, desc, meta, amountClass, amountText;
+      if (t.type === "transfer") {
+        const from = walletInfo(t.fromWallet), to = walletInfo(t.toWallet);
+        iconChar = "🔁"; iconClass = " transfer";
+        desc = (t.desc && t.desc.trim()) ? t.desc : "Transfer";
+        meta = from.icon + " " + escapeHtml(t.fromWallet) + " → " + to.icon + " " + escapeHtml(t.toWallet) + " · " + t.dateLabel;
+        amountClass = "transfer"; amountText = peso(t.amount);
+      } else {
+        const isIncome = t.type === "income";
+        const cat = catInfo(t.category, t.type);
+        const wal = walletInfo(t.wallet);
+        iconChar = cat.icon; iconClass = isIncome ? " income" : "";
+        desc = t.desc;
+        meta = escapeHtml(t.category) + " · " + wal.icon + " " + escapeHtml(t.wallet) + " · " + t.dateLabel;
+        amountClass = isIncome ? "income" : "expense";
+        amountText = (isIncome ? "+" : "−") + peso(t.amount);
+      }
+
+      return (
+        '<div class="tx">' +
+          '<div class="tx-left">' +
+            '<div class="tx-icon' + iconClass + '">' + iconChar + '</div>' +
+            '<div>' +
+              '<div class="tx-desc">' + escapeHtml(desc) + '</div>' +
+              '<div class="tx-meta">' + meta + '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="tx-right">' +
+            '<span class="tx-amount ' + amountClass + '">' + amountText + '</span>' +
+            actions +
+          '</div>' +
+        '</div>'
+      );
+    }
+
+    // Add up EXPENSE spending per category.
+    function categoryTotals(monthOnly) {
+      const totals = {};
+      categories.forEach(c => { totals[c.name] = 0; });
+      transactions.forEach(t => {
+        if (t.type !== "expense") return;
+        if (monthOnly && !isThisMonth(t.date)) return;
+        if (!(t.category in totals)) totals[t.category] = 0;
+        totals[t.category] += t.amount;
+      });
+      return totals;
+    }
+
+    // Six monthly buckets of income & expense (oldest -> newest), for charts.
+    function monthlyBuckets() {
+      const now = new Date();
+      const months = [];
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        months.push({
+          key: d.getFullYear() + "-" + d.getMonth(),
+          label: d.toLocaleDateString("en-PH", { month: "short" }),
+          income: 0, expense: 0
+        });
+      }
+      transactions.forEach(t => {
+        if (t.type !== "income" && t.type !== "expense") return;
+        const d = new Date(t.date);
+        const key = d.getFullYear() + "-" + d.getMonth();
+        const b = months.find(m => m.key === key);
+        if (!b) return;
+        if (t.type === "income") b.income += t.amount; else b.expense += t.amount;
+      });
+      return months;
+    }
+
+    // ============================================================
+    // RENDER each page from the data
+    // ============================================================
+    function render() {
+      const exp = expenseItems();
+      const inc = incomeItems();
+      const totalSpending = exp.reduce((s, t) => s + t.amount, 0);
+      const monthExpense  = exp.filter(t => isThisMonth(t.date)).reduce((s, t) => s + t.amount, 0);
+      const monthIncome   = inc.filter(t => isThisMonth(t.date)).reduce((s, t) => s + t.amount, 0);
+      const totals = categoryTotals();
+      const newestFirst = [...transactions].reverse();
+
+      // ---- Dashboard: balance + this-month stats ----
+      setBalanceEl(document.getElementById("d-balance"), totalBalance());
+      document.getElementById("d-balance-sub").textContent =
+        "Across " + wallets.length + (wallets.length === 1 ? " wallet" : " wallets");
+
+      document.getElementById("d-month-income").textContent = "+" + peso(monthIncome);
+      document.getElementById("d-month-expense").textContent = "−" + peso(monthExpense);
+      const net = monthIncome - monthExpense;
+      const netEl = document.getElementById("d-month-net");
+      netEl.textContent = (net < 0 ? "−" : "+") + peso(Math.abs(net));
+      netEl.style.color = net < 0 ? "var(--danger)" : "var(--green-dark)";
+
+      document.getElementById("d-pie").innerHTML = pieHtml(totals, totalSpending);
+      document.getElementById("d-budget").innerHTML = dashboardBudgetHtml();
+
+      const recent = newestFirst.slice(0, 5);
+      document.getElementById("d-recent").innerHTML =
+        recent.length ? recent.map(t => txRowHtml(t, false)).join("")
+                      : '<div class="empty">No transactions yet.</div>';
+
+      // ---- Transactions (respect both filters) ----
+      const typeF = document.getElementById("filter").value;
+      const catF = document.getElementById("cat-filter").value;
+      let filtered = newestFirst;
+      if (typeF !== "all") filtered = filtered.filter(t => t.type === typeF);
+      if (catF !== "all")  filtered = filtered.filter(t => t.category === catF);
+      document.getElementById("t-list").innerHTML =
+        filtered.length ? filtered.map(t => txRowHtml(t, true)).join("")
+                        : '<div class="empty">No transactions to show.</div>';
+
+      // ---- Wallets ----
+      renderWallets();
+
+      // ---- Categories ----
+      document.getElementById("c-budgets").innerHTML = budgetRowsHtml();
+      document.getElementById("c-breakdown").innerHTML =
+        totalSpending > 0 ? breakdownHtml(totals, totalSpending)
+                          : '<div class="empty">No spending yet.</div>';
+
+      // ---- Insights ----
+      renderInsights(totalSpending, monthExpense, monthIncome, totals);
+    }
+
+    // ---- Wallets page ----
+    function renderWallets() {
+      setBalanceEl(document.getElementById("w-total"), totalBalance());
+
+      document.getElementById("w-list").innerHTML = wallets.map(w => {
+        const bal = walletBalance(w.name);
+        let inSum = 0, outSum = 0;
+        transactions.forEach(t => {
+          if (t.type === "transfer") {
+            if (t.toWallet === w.name)   inSum += t.amount;
+            if (t.fromWallet === w.name) outSum += t.amount;
+            return;
+          }
+          if (t.wallet !== w.name) return;
+          if (t.type === "income") inSum += t.amount; else outSum += t.amount;
+        });
+        const balColor = bal < 0 ? "var(--danger)" : "var(--green-dark)";
+        const delBtn = wallets.length > 1
+          ? '<button class="delete-btn wallet-del" data-wallet="' + escapeHtml(w.name) + '" title="Delete">✕</button>'
+          : '';
+
+        return (
+          '<div class="card wallet-card">' +
+            '<div class="wallet-head">' +
+              '<span class="cat-name"><span class="swatch" style="background:' + w.color + '"></span>' +
+                w.icon + ' ' + escapeHtml(w.name) + '</span>' +
+              delBtn +
+            '</div>' +
+            '<div class="wallet-balance" style="color:' + balColor + '">' + peso(bal) + '</div>' +
+            '<div class="wallet-stats">' +
+              '<span class="wallet-in">▲ ' + peso(inSum) + '</span>' +
+              '<span class="wallet-out">▼ ' + peso(outSum) + '</span>' +
+            '</div>' +
+            '<div class="wallet-starting">Starting ₱ ' +
+              '<input type="number" class="wallet-start-input" data-wallet="' + escapeHtml(w.name) + '" ' +
+                'step="100" value="' + (Number(w.balance) || 0) + '" />' +
+            '</div>' +
+          '</div>'
+        );
+      }).join("");
+    }
+
+    // ---- Dashboard "This month's budget" summary ----
+    function dashboardBudgetHtml() {
+      const monthTotals = categoryTotals(true);
+      const budgeted = categories.filter(c => (budgets[c.name] || 0) > 0);
+      if (budgeted.length === 0) {
+        return '<div class="empty">No budgets set yet. Set monthly limits on the Categories tab to track them here.</div>';
+      }
+
+      const totalBudget = budgeted.reduce((s, c) => s + budgets[c.name], 0);
+      const spent = budgeted.reduce((s, c) => s + (monthTotals[c.name] || 0), 0);
+      const pct = Math.min(100, Math.round((spent / totalBudget) * 100));
+      const color = budgetColor(spent, totalBudget);
+      const over = budgeted.filter(c => (monthTotals[c.name] || 0) > budgets[c.name]);
+      const diff = totalBudget - spent;
+
+      const status = diff >= 0
+        ? '<span class="left">' + peso(diff) + ' left</span>'
+        : '<span class="over">' + peso(-diff) + ' over</span>';
+      const overNote = over.length
+        ? ' · <span class="over">' + over.length +
+          (over.length === 1 ? ' category over budget' : ' categories over budget') + '</span>'
+        : '';
+
+      return (
+        '<div class="budget-summary-top">' +
+          '<span class="budget-summary-spent" style="color:' + color + '">' + peso(spent) +
+            ' <span class="budget-summary-of">of ' + peso(totalBudget) + '</span></span>' +
+          '<span>' + status + '</span>' +
+        '</div>' +
+        '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:' + color + '"></div></div>' +
+        '<div class="budget-meta">' + pct + '% of this month\'s total budget used' + overNote + '</div>'
+      );
+    }
+
+    // ---- Categories tab: one editable budget row per category ----
+    function budgetRowsHtml() {
+      const monthTotals = categoryTotals(true);
+      return categories.map(c => {
+        const info = catInfo(c.name);
+        const spent = monthTotals[c.name] || 0;
+        const budget = budgets[c.name] || 0;
+        const has = budget > 0;
+        const pct = has ? Math.min(100, Math.round((spent / budget) * 100)) : 0;
+        const color = budgetColor(spent, budget);
+        const diff = budget - spent;
+
+        let meta;
+        if (!has) {
+          meta = peso(spent) + ' spent this month · no limit set';
+        } else {
+          meta = peso(spent) + ' of ' + peso(budget) + ' · ' +
+            (diff >= 0
+              ? '<span class="left">' + peso(diff) + ' left</span>'
+              : '<span class="over">' + peso(-diff) + ' over</span>');
+        }
+
+        return (
+          '<div class="budget-row">' +
+            '<div class="budget-head">' +
+              '<span class="cat-name"><span class="swatch" style="background:' + info.color + '"></span>' +
+                info.icon + ' ' + escapeHtml(c.name) + '</span>' +
+              '<span class="budget-input-wrap">₱ ' +
+                '<input type="number" class="budget-input" data-cat="' + escapeHtml(c.name) + '" ' +
+                  'min="0" step="100" placeholder="No limit" value="' + (has ? budget : '') + '" />' +
+              '</span>' +
+            '</div>' +
+            '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:' + color + '"></div></div>' +
+            '<div class="budget-meta">' + meta + '</div>' +
+          '</div>'
+        );
+      }).join("");
+    }
+
+    // Build the category-bars HTML, biggest first.
+    function breakdownHtml(totals, total) {
+      const used = Object.keys(totals)
+        .filter(c => totals[c] > 0)
+        .sort((a, b) => totals[b] - totals[a]);
+      if (used.length === 0) return '<div class="empty">No spending yet.</div>';
+
+      return used.map(c => {
+        const pct = total > 0 ? Math.round((totals[c] / total) * 100) : 0;
+        const color = catInfo(c).color;
+        return (
+          '<div class="cat-row">' +
+            '<div class="cat-head">' +
+              '<span class="cat-name"><span class="dot" style="background:' + color + '"></span>' + escapeHtml(c) + '</span>' +
+              '<span>' + peso(totals[c]) + ' · ' + pct + '%</span>' +
+            '</div>' +
+            '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:' + color + '"></div></div>' +
+          '</div>'
+        );
+      }).join("");
+    }
+
+    // Build the donut chart + legend from category totals.
+    function pieHtml(totals, total) {
+      const used = Object.keys(totals)
+        .filter(c => totals[c] > 0)
+        .sort((a, b) => totals[b] - totals[a]);
+      if (used.length === 0) return '<div class="empty">No spending yet — add an expense to see your chart.</div>';
+
+      let running = 0;
+      const stops = [];
+      const legend = [];
+      used.forEach(c => {
+        const pct = (totals[c] / total) * 100;
+        const start = running;
+        running += pct;
+        const info = catInfo(c);
+        const color = info.color;
+        stops.push(color + " " + start + "% " + running + "%");
+        legend.push(
+          '<div class="legend-row">' +
+            '<span class="legend-left"><span class="dot" style="background:' + color + '"></span>' +
+              info.icon + ' ' + escapeHtml(c) + '</span>' +
+            '<span>' + peso(totals[c]) +
+              ' <span class="legend-pct">· ' + Math.round(pct) + '%</span></span>' +
+          '</div>'
+        );
+      });
+
+      return (
+        '<div class="pie-wrap">' +
+          '<div class="donut" style="background:conic-gradient(' + stops.join(", ") + ')">' +
+            '<div class="donut-hole">' +
+              '<span class="h-label">Spent</span>' +
+              '<span class="h-value">' + peso(total) + '</span>' +
+            '</div>' +
+          '</div>' +
+          '<div class="legend">' + legend.join("") + '</div>' +
+        '</div>'
+      );
+    }
+
+    // Vertical bar chart of total spending per month (last 6 months).
+    function monthlyChartHtml() {
+      const months = monthlyBuckets();
+      if (!months.some(m => m.expense > 0)) {
+        return '<div class="empty">No monthly data yet.</div>';
+      }
+      const max = Math.max.apply(null, months.map(m => m.expense));
+      return '<div class="barchart">' + months.map(m => {
+        const h = max > 0 ? Math.round((m.expense / max) * 100) : 0;
+        return (
+          '<div class="bar-col">' +
+            '<div class="bar-area">' +
+              '<div class="vbar" style="height:' + h + '%" title="' + peso(m.expense) + '"></div>' +
+            '</div>' +
+            '<span class="vlabel">' + m.label + '</span>' +
+          '</div>'
+        );
+      }).join("") + '</div>';
+    }
+
+    // Grouped income-vs-expense bar chart (last 6 months).
+    function monthlyCompareHtml() {
+      const months = monthlyBuckets();
+      if (!months.some(m => m.income > 0 || m.expense > 0)) {
+        return '<div class="empty">No monthly data yet.</div>';
+      }
+      const vals = [];
+      months.forEach(m => { vals.push(m.income, m.expense); });
+      const max = Math.max.apply(null, vals) || 1;
+      return '<div class="barchart">' + months.map(m => {
+        const hi = Math.round((m.income / max) * 100);
+        const he = Math.round((m.expense / max) * 100);
+        return (
+          '<div class="bar-col">' +
+            '<div class="bar-area"><div class="bar-pair">' +
+              '<div class="vbar income" style="height:' + hi + '%" title="In ' + peso(m.income) + '"></div>' +
+              '<div class="vbar expense" style="height:' + he + '%" title="Out ' + peso(m.expense) + '"></div>' +
+            '</div></div>' +
+            '<span class="vlabel">' + m.label + '</span>' +
+          '</div>'
+        );
+      }).join("") + '</div>';
+    }
+
+    function renderInsights(total, monthExpense, monthIncome, totals) {
+      const exp = expenseItems();
+      const inc = incomeItems();
+
+      // Charts
+      document.getElementById("i-compare").innerHTML = monthlyCompareHtml();
+      document.getElementById("i-monthly").innerHTML = monthlyChartHtml();
+      document.getElementById("i-breakdown").innerHTML =
+        total > 0 ? breakdownHtml(totals, total) : '<div class="empty">No spending yet.</div>';
+
+      // Savings rate this month
+      const rateEl = document.getElementById("i-savings-rate");
+      if (monthIncome > 0) {
+        const rate = Math.round(((monthIncome - monthExpense) / monthIncome) * 100);
+        rateEl.textContent = rate + "%";
+        rateEl.style.color = rate < 0 ? "var(--danger)" : "var(--green-dark)";
+      } else {
+        rateEl.textContent = "—";
+        rateEl.style.color = "var(--muted)";
+      }
+
+      // Total saved (all time) = all income − all expenses
+      const totalIncome = inc.reduce((s, t) => s + t.amount, 0);
+      const saved = totalIncome - total;
+      const savedEl = document.getElementById("i-saved");
+      savedEl.textContent = (saved < 0 ? "−" : "") + peso(Math.abs(saved));
+      savedEl.style.color = saved < 0 ? "var(--danger)" : "var(--green-dark)";
+
+      // Average monthly income over the last 6 months
+      const months = monthlyBuckets();
+      const avgIncome = months.reduce((s, m) => s + m.income, 0) / 6;
+      document.getElementById("i-avg-income").textContent = peso(avgIncome);
+
+      // Top category
+      let topCat = "—", topVal = 0;
+      for (const c in totals) { if (totals[c] > topVal) { topVal = totals[c]; topCat = c; } }
+      document.getElementById("i-top").textContent =
+        topVal > 0 ? topCat + " (" + peso(topVal) + ")" : "—";
+
+      // Average per expense
+      const avg = exp.length ? total / exp.length : 0;
+      document.getElementById("i-avg").textContent = peso(avg);
+
+      // Biggest single expense
+      let biggest = null;
+      exp.forEach(t => { if (!biggest || t.amount > biggest.amount) biggest = t; });
+      document.getElementById("i-biggest").textContent =
+        biggest ? escapeHtml(biggest.desc) + " — " + peso(biggest.amount) : "—";
+
+      // This month vs all time
+      const share = total > 0 ? Math.round((monthExpense / total) * 100) : 0;
+      document.getElementById("i-month").textContent =
+        peso(monthExpense) + " (" + share + "% of all time)";
+    }
+
+    // ============================================================
+    // MODAL dropdowns (category depends on the active tab; wallets always)
+    // ============================================================
+    function fillSelect(sel, items) {
+      const prev = sel.value;
+      sel.innerHTML = "";
+      items.forEach(it => {
+        const o = document.createElement("option");
+        o.value = it.name; o.textContent = it.icon + " " + it.name;
+        sel.appendChild(o);
+      });
+      if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
+    }
+    function populateModalSelects() {
+      fillSelect(document.getElementById("category"),
+                 currentType === "income" ? incomeCategories : categories);
+      fillSelect(document.getElementById("wallet"), wallets);
+      fillSelect(document.getElementById("wallet-from"), wallets);
+      fillSelect(document.getElementById("wallet-to"), wallets);
+    }
+
+    // Fill the Transactions category filter with every category name (both kinds).
+    function populateFilterCategories() {
+      const f = document.getElementById("cat-filter");
+      const prev = f.value;
+      const names = [];
+      categories.forEach(c => { if (!names.includes(c.name)) names.push(c.name); });
+      incomeCategories.forEach(c => { if (!names.includes(c.name)) names.push(c.name); });
+      f.innerHTML = '<option value="all">All categories</option>' +
+        names.map(n => '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>').join("");
+      if ([...f.options].some(o => o.value === prev)) f.value = prev;
+    }
+
+    // ============================================================
+    // CATEGORIES: management lists (expense + income, with kebab menus)
+    // ============================================================
+    function catManageRowHtml(c, kind, i) {
+      const ref = (kind === "income" ? "cn-" : "cx-") + i;
+      return (
+        '<div class="cat-manage-row">' +
+          '<span class="cat-name">' +
+            '<span class="swatch" style="background:' + c.color + '"></span>' +
+            c.icon + ' ' + escapeHtml(c.name) +
+          '</span>' +
+          '<div class="kebab-wrap">' +
+            '<button class="kebab-btn" data-id="' + ref + '" title="More" aria-label="More actions">⋮</button>' +
+            '<div class="kebab-menu" data-menu="' + ref + '">' +
+              '<button class="kebab-item edit-cat" data-kind="' + kind + '" data-cat="' + escapeHtml(c.name) + '">✏️ Edit</button>' +
+              '<button class="kebab-item delete-cat" data-kind="' + kind + '" data-cat="' + escapeHtml(c.name) + '">🗑️ Delete</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>'
+      );
+    }
+    function renderCategories() {
+      document.getElementById("c-manage").innerHTML =
+        categories.map((c, i) => catManageRowHtml(c, "expense", i)).join("");
+      document.getElementById("c-income-manage").innerHTML =
+        incomeCategories.map((c, i) => catManageRowHtml(c, "income", i)).join("");
+    }
+
+    // Redraw EVERYTHING that depends on categories/wallets.
+    function refreshAll() {
+      populateModalSelects();
+      populateFilterCategories();
+      renderCategories();
+      render();
+    }
+
+    // ---- Add a category (shared by both forms via the kind argument) ----
+    async function addCategory(kind, name, icon, color) {
+      const list = kind === "income" ? incomeCategories : categories;
+      if (list.some(c => c.name.toLowerCase() === name.toLowerCase())) {
+        alert('You already have a "' + name + '" ' + kind + ' category.');
+        return false;
+      }
+      await dbInsertCategory(kind, { name: name, icon: icon, color: color });
+      list.push({ name: name, icon: icon, color: color });
+      refreshAll();
+      return true;
+    }
+
+    document.getElementById("cat-form").addEventListener("submit", async function (e) {
+      e.preventDefault();
+      const name = document.getElementById("cat-name").value.trim();
+      if (!name) return;
+      if (await addCategory("expense", name,
+            document.getElementById("cat-icon").value.trim() || "🏷️",
+            document.getElementById("cat-color").value)) {
+        this.reset();
+        document.getElementById("cat-icon").value = "🏷️";
+        document.getElementById("cat-color").value = "#1f8a4c";
+      }
+    });
+    document.getElementById("income-cat-form").addEventListener("submit", async function (e) {
+      e.preventDefault();
+      const name = document.getElementById("income-cat-name").value.trim();
+      if (!name) return;
+      if (await addCategory("income", name,
+            document.getElementById("income-cat-icon").value.trim() || "💰",
+            document.getElementById("income-cat-color").value)) {
+        this.reset();
+        document.getElementById("income-cat-icon").value = "💰";
+        document.getElementById("income-cat-color").value = "#1f8a4c";
+      }
+    });
+
+    // ---- Delete a category ----
+    async function deleteCategory(kind, name) {
+      const list = kind === "income" ? incomeCategories : categories;
+      if (list.length <= 1) {
+        alert("Keep at least one " + kind + " category.");
+        return;
+      }
+      const inUse = transactions.filter(t => t.type === kind && t.category === name).length;
+      const fallback = list.find(c => c.name !== name).name;
+
+      if (inUse > 0) {
+        const ok = confirm(
+          inUse + ' transaction(s) use "' + name + '".\n' +
+          'Delete it and move them to "' + fallback + '"?'
+        );
+        if (!ok) return;
+        await dbReassignTxCategory(kind, name, fallback);
+        transactions.forEach(t => {
+          if (t.type === kind && t.category === name) t.category = fallback;
+        });
+      }
+
+      await dbDeleteCategory(kind, name);
+      if (kind === "income") {
+        incomeCategories = incomeCategories.filter(c => c.name !== name);
+      } else {
+        categories = categories.filter(c => c.name !== name);
+        if (name in budgets) { await dbDeleteBudget(name); delete budgets[name]; }
+      }
+      refreshAll();
+    }
+
+    // ---- Edit a category (modal) ----
+    const catOverlay = document.getElementById("cat-overlay");
+    let editingCat = null;   // { kind, name } of the category being edited
+
+    function openCatModal(kind, name) {
+      const list = kind === "income" ? incomeCategories : categories;
+      const c = list.find(x => x.name === name);
+      if (!c) return;
+      editingCat = { kind: kind, name: name };
+      document.getElementById("cat-modal-title").textContent =
+        "Edit " + (kind === "income" ? "income" : "expense") + " category";
+      document.getElementById("cat-edit-icon").value = c.icon;
+      document.getElementById("cat-edit-name").value = c.name;
+      document.getElementById("cat-edit-color").value = c.color;
+      catOverlay.classList.add("open");
+      document.getElementById("cat-edit-name").focus();
+    }
+    function closeCatModal() {
+      catOverlay.classList.remove("open");
+      editingCat = null;
+    }
+    document.getElementById("cat-cancel").addEventListener("click", closeCatModal);
+    catOverlay.addEventListener("click", e => { if (e.target === catOverlay) closeCatModal(); });
+
+    document.getElementById("cat-edit-form").addEventListener("submit", async function (e) {
+      e.preventDefault();
+      if (!editingCat) return;
+      const kind = editingCat.kind, oldName = editingCat.name;
+      const list = kind === "income" ? incomeCategories : categories;
+      const newName = document.getElementById("cat-edit-name").value.trim();
+      const icon = document.getElementById("cat-edit-icon").value.trim() || (kind === "income" ? "💰" : "🏷️");
+      const color = document.getElementById("cat-edit-color").value;
+      if (!newName) return;
+
+      // No duplicate names within the same kind (other than this one).
+      if (list.some(c => c.name.toLowerCase() === newName.toLowerCase() && c.name !== oldName)) {
+        alert('You already have a "' + newName + '" ' + kind + ' category.');
+        return;
+      }
+
+      const cat = list.find(c => c.name === oldName);
+      if (!cat) return;
+
+      // If renamed, carry transactions and (for expenses) the budget along.
+      if (newName !== oldName) {
+        await dbReassignTxCategory(kind, oldName, newName);
+        transactions.forEach(t => {
+          if (t.type === kind && t.category === oldName) t.category = newName;
+        });
+        if (kind === "expense" && oldName in budgets) {
+          await dbRenameBudget(oldName, newName);
+          budgets[newName] = budgets[oldName];
+          delete budgets[oldName];
+        }
+      }
+
+      await dbUpdateCategory(kind, oldName, { name: newName, icon: icon, color: color });
+      cat.name = newName; cat.icon = icon; cat.color = color;
+      closeCatModal();
+      refreshAll();
+    });
+
+    // ============================================================
+    // WALLETS: add / delete / edit starting balance
+    // ============================================================
+    document.getElementById("wallet-form").addEventListener("submit", async function (e) {
+      e.preventDefault();
+      const name  = document.getElementById("wallet-name").value.trim();
+      const icon  = document.getElementById("wallet-icon").value.trim() || "👛";
+      const color = document.getElementById("wallet-color").value;
+      const start = parseFloat(document.getElementById("wallet-start").value);
+      if (!name) return;
+
+      if (wallets.some(w => w.name.toLowerCase() === name.toLowerCase())) {
+        alert('You already have a "' + name + '" wallet.');
+        return;
+      }
+
+      const w = { name: name, icon: icon, color: color, balance: isNaN(start) ? 0 : start };
+      await dbInsertWallet(w);
+      wallets.push(w);
+      refreshAll();
+
+      this.reset();
+      document.getElementById("wallet-icon").value = "👛";
+      document.getElementById("wallet-color").value = "#1f8a4c";
+    });
+
+    async function deleteWallet(name) {
+      if (wallets.length <= 1) {
+        alert("Keep at least one wallet.");
+        return;
+      }
+      const fallback = wallets.find(w => w.name !== name).name;
+      const inUse = transactions.filter(t =>
+        t.wallet === name || t.fromWallet === name || t.toWallet === name).length;
+
+      const msg = inUse > 0
+        ? inUse + ' transaction(s) use "' + name + '".\nDelete it and move them to "' + fallback + '"?'
+        : 'Delete the "' + name + '" wallet?';
+      if (!confirm(msg)) return;
+
+      if (inUse > 0) {
+        await dbReassignWallet(name, fallback);
+        transactions.forEach(t => {
+          if (t.wallet === name)     t.wallet = fallback;
+          if (t.fromWallet === name) t.fromWallet = fallback;
+          if (t.toWallet === name)   t.toWallet = fallback;
+        });
+      }
+      await dbDeleteWallet(name);
+      wallets = wallets.filter(w => w.name !== name);
+      refreshAll();
+    }
+
+    // ============================================================
+    // PAGE SWITCHING (sidebar tabs)
+    // ============================================================
+    document.querySelectorAll(".nav-item").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".nav-item").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        const page = btn.dataset.page;
+        document.querySelectorAll(".page").forEach(p => p.classList.add("hidden"));
+        document.getElementById("page-" + page).classList.remove("hidden");
+      });
+    });
+
+    // ============================================================
+    // MODAL open / close + Expense / Income / Transfer tab switching
+    // ============================================================
+    const overlay = document.getElementById("overlay");
+    let editingId = null;          // null = adding; otherwise the id being edited
+    let currentType = "expense";   // which tab is active
+
+    function setType(type) {
+      currentType = type;
+      document.querySelectorAll(".tx-tab").forEach(t =>
+        t.classList.toggle("active", t.dataset.type === type));
+
+      const isTransfer = type === "transfer";
+      document.getElementById("field-category").classList.toggle("hidden", isTransfer);
+      document.getElementById("field-wallet").classList.toggle("hidden", isTransfer);
+      document.getElementById("field-from").classList.toggle("hidden", !isTransfer);
+      document.getElementById("field-to").classList.toggle("hidden", !isTransfer);
+
+      populateModalSelects();
+      document.getElementById("modal-submit").textContent =
+        editingId !== null ? "Save"
+          : (type === "income" ? "Add Income" : type === "transfer" ? "Add Transfer" : "Add Expense");
+    }
+    document.querySelectorAll(".tx-tab").forEach(tab =>
+      tab.addEventListener("click", () => setType(tab.dataset.type)));
+
+    function openModal() {
+      editingId = null;
+      document.getElementById("expense-form").reset();
+      setType("expense");
+      overlay.classList.add("open");
+      document.getElementById("desc").focus();
+    }
+    function openEditModal(id) {
+      const tx = transactions.find(x => x.id === id);
+      if (!tx) return;
+      editingId = id;
+      document.getElementById("desc").value = tx.desc || "";
+      document.getElementById("amount").value = tx.amount;
+      setType(tx.type);
+      if (tx.type === "transfer") {
+        document.getElementById("wallet-from").value = tx.fromWallet;
+        document.getElementById("wallet-to").value = tx.toWallet;
+      } else {
+        document.getElementById("category").value = tx.category;
+        document.getElementById("wallet").value = tx.wallet;
+      }
+      overlay.classList.add("open");
+      document.getElementById("desc").focus();
+    }
+    function closeModal() {
+      overlay.classList.remove("open");
+      document.getElementById("expense-form").reset();
+      editingId = null;
+    }
+    document.getElementById("open-modal").addEventListener("click", openModal);
+    document.getElementById("cancel-modal").addEventListener("click", closeModal);
+    overlay.addEventListener("click", e => { if (e.target === overlay) closeModal(); });
+
+    // ============================================================
+    // ADD / EDIT a transaction
+    // ============================================================
+    document.getElementById("expense-form").addEventListener("submit", async function (e) {
+      e.preventDefault();
+      const amount = parseFloat(document.getElementById("amount").value);
+      if (isNaN(amount) || amount <= 0) return;
+      const desc = document.getElementById("desc").value.trim();
+      const now = new Date();
+      const dateLabel = now.toLocaleDateString("en-PH", { month: "short", day: "numeric" });
+
+      if (currentType === "transfer") {
+        const from = document.getElementById("wallet-from").value;
+        const to = document.getElementById("wallet-to").value;
+        if (from === to) { alert("Pick two different wallets for a transfer."); return; }
+
+        if (editingId !== null) {
+          const tx = transactions.find(x => x.id === editingId);
+          if (tx) {
+            tx.type = "transfer"; tx.desc = desc; tx.amount = amount;
+            tx.fromWallet = from; tx.toWallet = to;
+            delete tx.category; delete tx.wallet;
+            await dbUpdateTransaction(tx);
+          }
+        } else {
+          const t = {
+            type: "transfer", desc: desc, amount: amount,
+            fromWallet: from, toWallet: to,
+            date: now.toISOString(), dateLabel: dateLabel
+          };
+          const id = await dbInsertTransaction(t);
+          if (id == null) return;          // save failed — don't touch the UI
+          t.id = id;
+          transactions.push(t);
+        }
+      } else {
+        if (!desc) return;
+        const category = document.getElementById("category").value;
+        const wallet = document.getElementById("wallet").value;
+
+        if (editingId !== null) {
+          const tx = transactions.find(x => x.id === editingId);
+          if (tx) {
+            tx.type = currentType; tx.desc = desc; tx.amount = amount;
+            tx.category = category; tx.wallet = wallet;
+            delete tx.fromWallet; delete tx.toWallet;
+            await dbUpdateTransaction(tx);
+          }
+        } else {
+          const t = {
+            type: currentType, desc: desc, amount: amount,
+            category: category, wallet: wallet,
+            date: now.toISOString(), dateLabel: dateLabel
+          };
+          const id = await dbInsertTransaction(t);
+          if (id == null) return;
+          t.id = id;
+          transactions.push(t);
+        }
+      }
+
+      render();
+      closeModal();
+    });
+
+    // ============================================================
+    // CLICKS: kebab menus, edit/delete (tx, category, wallet)
+    // ============================================================
+    document.addEventListener("click", async function (e) {
+      // ----- Kebab (⋮) menu: toggle, and close any others -----
+      const kebabBtn = e.target.closest(".kebab-btn");
+      document.querySelectorAll(".kebab-menu.open").forEach(m => {
+        if (!kebabBtn || m.dataset.menu !== kebabBtn.dataset.id) m.classList.remove("open");
+      });
+      if (kebabBtn) {
+        const menu = document.querySelector('.kebab-menu[data-menu="' + kebabBtn.dataset.id + '"]');
+        if (menu) menu.classList.toggle("open");
+        return;
+      }
+
+      // ----- Transaction edit -----
+      const editBtn = e.target.closest(".edit-tx");
+      if (editBtn) { openEditModal(editBtn.dataset.id); return; }
+
+      // ----- Transaction delete (confirm) -----
+      const delBtn = e.target.closest(".delete-tx");
+      if (delBtn) {
+        const id = delBtn.dataset.id;                 // a database UUID (string)
+        const tx = transactions.find(x => x.id === id);
+        const label = tx ? ((tx.desc && tx.desc.trim()) ? tx.desc : "this transaction") : "";
+        if (tx && confirm('Delete "' + label + '" (' + peso(tx.amount) + ')?\nThis can\'t be undone.')) {
+          await dbDeleteTransaction(id);
+          transactions = transactions.filter(x => x.id !== id);
+          render();
+        }
+        return;
+      }
+
+      // ----- Category edit / delete -----
+      const editCat = e.target.closest(".edit-cat");
+      if (editCat) { openCatModal(editCat.dataset.kind, editCat.dataset.cat); return; }
+      const delCat = e.target.closest(".delete-cat");
+      if (delCat) { deleteCategory(delCat.dataset.kind, delCat.dataset.cat); return; }
+
+      // ----- Wallet delete -----
+      const walletDel = e.target.closest(".wallet-del");
+      if (walletDel) { deleteWallet(walletDel.dataset.wallet); return; }
+    });
+
+    // ============================================================
+    // CHANGES: budget limits + wallet starting balances
+    // ============================================================
+    document.querySelector(".app").addEventListener("change", async function (e) {
+      if (e.target.classList.contains("budget-input")) {
+        const name = e.target.dataset.cat;
+        const val = parseFloat(e.target.value);
+        if (isNaN(val) || val <= 0) { await dbDeleteBudget(name); delete budgets[name]; }
+        else { await dbSetBudget(name, val); budgets[name] = val; }
+        render();
+        return;
+      }
+      if (e.target.classList.contains("wallet-start-input")) {
+        const name = e.target.dataset.wallet;
+        const val = parseFloat(e.target.value);
+        const w = wallets.find(x => x.name === name);
+        if (w) { w.balance = isNaN(val) ? 0 : val; await dbUpdateWallet(name, w); render(); }
+        return;
+      }
+    });
+
+    // Re-render the transactions list when either filter changes.
+    document.getElementById("filter").addEventListener("change", render);
+    document.getElementById("cat-filter").addEventListener("change", render);
+
+    // NOTE: we do NOT draw on load anymore. The app renders itself after
+    // you log in — see loadAll() called from the auth code below.
+  </script>
+
+  <!-- ============================================================
+       AUTHENTICATION (Supabase)
+       Gates who can see the app, and on login pulls that user's data
+       from the database via loadAll().
+       ============================================================ -->
+  <script>
+    // Your project's public config. The anon key is safe in the
+    // browser: Row Level Security decides what it's actually allowed
+    // to do. (The secret service_role key must NEVER live here.)
+    const SUPABASE_URL = "https://xpfnqmmkyyzwsesgrfch.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhwZm5xbW1reXl6d3Nlc2dyZmNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0MjMzODQsImV4cCI6MjA5Nzk5OTM4NH0.2jNnKMrsHZn3ot_3Gjfo8cJrl_VzK-mJQEwPmrgjGoA";
+
+    // Create the client we'll use to talk to Supabase.
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const authScreen = document.getElementById("auth-screen");
+    const appRoot    = document.getElementById("app");
+    const authForm   = document.getElementById("auth-form");
+    const authError  = document.getElementById("auth-error");
+    const authSubmit = document.getElementById("auth-submit");
+    const authTitle  = document.getElementById("auth-title");
+    const toggleText = document.getElementById("auth-toggle-text");
+    const toggleLink = document.getElementById("auth-toggle-link");
+    let authMode = "login";   // "login" or "signup"
+
+    // ---- Show the app vs. the login screen ----
+    function showApp(email) {
+      document.getElementById("user-row").textContent = email || "";
+      authScreen.style.display = "none";
+      appRoot.style.display = "flex";
+    }
+    function showAuth() {
+      appRoot.style.display = "none";
+      authScreen.style.display = "flex";
+    }
+
+    // ---- Flip between "Log in" and "Sign up" ----
+    function setAuthMode(mode) {
+      authMode = mode;
+      authError.textContent = "";
+      if (mode === "signup") {
+        authTitle.textContent = "Create your account";
+        authSubmit.textContent = "Sign up";
+        toggleText.textContent = "Already have an account?";
+        toggleLink.textContent = "Log in";
+      } else {
+        authTitle.textContent = "Welcome back";
+        authSubmit.textContent = "Log in";
+        toggleText.textContent = "New here?";
+        toggleLink.textContent = "Create an account";
+      }
+    }
+    toggleLink.addEventListener("click", () =>
+      setAuthMode(authMode === "login" ? "signup" : "login"));
+
+    // ---- Submit: sign up or log in ----
+    authForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      authError.style.color = "var(--danger)";
+      authError.textContent = "";
+      const email = document.getElementById("auth-email").value.trim();
+      const password = document.getElementById("auth-password").value;
+      if (!email || !password) return;
+
+      authSubmit.disabled = true;
+      try {
+        if (authMode === "signup") {
+          const { data, error } = await sb.auth.signUp({ email, password });
+          if (error) throw error;
+          if (!data.session) {
+            // Email confirmation is on — they must verify first.
+            authError.style.color = "var(--green-dark)";
+            authError.textContent = "Account made! Check your email to confirm, then log in.";
+            setAuthMode("login");
+          }
+          // If a session came back, onAuthStateChange below shows the app.
+        } else {
+          const { error } = await sb.auth.signInWithPassword({ email, password });
+          if (error) throw error;
+        }
+      } catch (err) {
+        authError.style.color = "var(--danger)";
+        authError.textContent = err.message || "Something went wrong.";
+      } finally {
+        authSubmit.disabled = false;
+      }
+    });
+
+    // ---- Log out ----
+    document.getElementById("logout-btn").addEventListener("click", () => sb.auth.signOut());
+
+    // ---- React to any auth change (login, logout, page refresh) ----
+    sb.auth.onAuthStateChange((event, session) => {
+      if (session) {
+        currentUserId = session.user.id;
+        showApp(session.user.email);
+        loadAll();                       // pull this user's data from the cloud
+      } else {
+        currentUserId = null;
+        showAuth();
+      }
+    });
+
+    // ---- Decide what to show on first load ----
+    sb.auth.getSession().then(({ data }) => {
+      if (data.session) {
+        currentUserId = data.session.user.id;
+        showApp(data.session.user.email);
+        loadAll();
+      } else {
+        showAuth();
+      }
+    });
+  </script>
+</body>
+</html>
